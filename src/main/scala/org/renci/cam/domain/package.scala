@@ -55,12 +55,11 @@ package object domain {
     }
 
     def makeEncoder(prefixesMap: Map[String, String]): Encoder[IRI] = Encoder.encodeString.contramap { iri =>
-      prefixesMap.values
-        .find(v => iri.value.startsWith(v))
-        .map { namespace =>
-          s"$namespace${iri.value.drop(namespace.length)}"
-        }
-        .getOrElse(iri.value)
+      val startsWith = prefixesMap.filter { case (prefix, namespace) => iri.value.startsWith(namespace) }
+      if (startsWith.nonEmpty) {
+        val (prefix, namespace) = startsWith.maxBy(_._2.length)
+        s"$prefix:${iri.value.drop(namespace.length)}"
+      } else iri.value
     }
 
     implicit val embedInSPARQL = SPARQLInterpolator.embed[IRI](Case(SPARQLContext, SPARQLContext) { iri =>
