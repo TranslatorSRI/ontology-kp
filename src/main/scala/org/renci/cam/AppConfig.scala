@@ -4,7 +4,7 @@ import org.http4s.Uri
 import zio.config._
 import zio.config.magnolia.DeriveConfigDescriptor.{Descriptor, descriptor, _}
 
-final case class AppConfig(host: String, subdirectory: String, port: Int, sparqlEndpoint: Uri)
+final case class AppConfig(host: String, location: String, port: Int, sparqlEndpoint: Uri)
 
 object AppConfig {
 

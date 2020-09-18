@@ -85,10 +85,10 @@ object Server extends App {
         queryRoute <- queryRouteR(queryEndpoint)
         routes = queryRoute //<+> predicatesRoute
         // will be available at /docs
-        openAPI = List(queryEndpoint).toOpenAPI("SPARQL-KP API", "0.1").toYaml
-//        docsRoute =
-//          if (appConfig.subdirectory.isEmpty) new SwaggerHttp4s(openAPI).routes[Task]
-//          else swaggerRoutes(openAPI, appConfig.subdirectory)
+        openAPI = List(queryEndpoint)
+          .toOpenAPI("SPARQL-KP API", "0.1")
+          .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
+          .toYaml
         docsRoute = swaggerRoutes(openAPI)
         httpApp = Router("" -> (routes <+> docsRoute)).orNotFound
         httpAppWithLogging = Logger.httpApp(true, false)(httpApp)
