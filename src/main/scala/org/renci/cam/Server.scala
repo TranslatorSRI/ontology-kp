@@ -81,7 +81,7 @@ object Server extends App {
         routes = queryRoute //<+> predicatesRoute
         // will be available at /docs
         //openAPI = List(queryEndpoint, predicatesEndpoint).toOpenAPI("CAM-KP API", "0.1").toYaml
-        openAPI = List(queryEndpoint).toOpenAPI("CAM-KP API", "0.1").toYaml
+        openAPI = List(queryEndpoint).toOpenAPI("SPARQL-KP API", "0.1").toYaml
         docsRoute = new SwaggerHttp4s(openAPI).routes[Task]
         httpApp = Router("" -> (routes <+> docsRoute)).orNotFound
         httpAppWithLogging = Logger.httpApp(true, false)(httpApp)
