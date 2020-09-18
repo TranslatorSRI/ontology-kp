@@ -86,9 +86,10 @@ object Server extends App {
         routes = queryRoute //<+> predicatesRoute
         // will be available at /docs
         openAPI = List(queryEndpoint).toOpenAPI("SPARQL-KP API", "0.1").toYaml
-        docsRoute =
-          if (appConfig.subdirectory.isEmpty) new SwaggerHttp4s(openAPI).routes[Task]
-          else swaggerRoutes(openAPI, appConfig.subdirectory)
+//        docsRoute =
+//          if (appConfig.subdirectory.isEmpty) new SwaggerHttp4s(openAPI).routes[Task]
+//          else swaggerRoutes(openAPI, appConfig.subdirectory)
+        docsRoute = swaggerRoutes(openAPI)
         httpApp = Router("" -> (routes <+> docsRoute)).orNotFound
         httpAppWithLogging = Logger.httpApp(true, false)(httpApp)
         result <-
@@ -118,16 +119,16 @@ object Server extends App {
     } yield out).exitCode
 
   // hack using SwaggerHttp4s code to handle running in subdirectory
-  private def swaggerRoutes(yaml: String, subdirectory: String): HttpRoutes[Task] = {
+  private def swaggerRoutes(yaml: String): HttpRoutes[Task] = {
     val dsl = Http4sDsl[Task]
     import dsl._
     val contextPath = "docs"
     val yamlName = "docs.yaml"
     HttpRoutes.of[Task] {
-      case path @ GET -> Root / `subdirectory` / `contextPath` =>
-        val queryParameters = Map("url" -> Seq(s"${path.uri}/$yamlName"))
+      case path @ GET -> Root / `contextPath` =>
+        val queryParameters = Map("url" -> Seq(s"$yamlName"))
         Uri
-          .fromString(s"${path.uri}/index.html")
+          .fromString(s"$contextPath/index.html")
           .map(uri => uri.setQueryParams(queryParameters))
           .map(uri => PermanentRedirect(Location(uri)))
           .getOrElse(NotFound())
