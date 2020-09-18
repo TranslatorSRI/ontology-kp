@@ -2,7 +2,7 @@ package org.renci.cam
 
 import cats.implicits._
 import io.circe.generic.auto._
-import io.circe.{Decoder, Encoder}
+import io.circe.{Decoder, Encoder, Printer}
 import org.http4s._
 import org.http4s.implicits._
 import org.http4s.server.Router
@@ -26,6 +26,12 @@ import zio.{config => _, _}
 import scala.concurrent.duration._
 
 object Server extends App {
+
+  object LocalTapirJsonCirce extends TapirJsonCirce {
+    override def jsonPrinter: Printer = Printer.spaces2.copy(dropNullValues = true)
+  }
+
+  import LocalTapirJsonCirce._
 
 //  val predicatesEndpoint: ZEndpoint[Unit, String, String] = endpoint.get.in("predicates").errorOut(stringBody).out(jsonBody[String])
 //
@@ -92,7 +98,7 @@ object Server extends App {
 
   val configLayer: Layer[Throwable, ZConfig[AppConfig]] = TypesafeConfig.fromDefaultLoader(AppConfig.config)
 
-  val biolinkLayer = Biolink.getBiolinkModel.toLayer
+  val biolinkLayer: ZLayer[HttpClient with Has[PrefixesMap], Throwable, Has[Biolink]] = Biolink.getBiolinkModel.toLayer
 
   val prefixesLayer: ZLayer[HttpClient, Throwable, Has[PrefixesMap]] = Utilities.makePrefixesLayer
 

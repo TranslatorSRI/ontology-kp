@@ -16,6 +16,7 @@ package object domain {
 
     val namespace: String = "https://w3id.org/biolink/vocab/"
 
+    //FIXME would be good to check that this is a known Biolink term rather than just accepting
     implicit val decoder: Decoder[BiolinkTerm] = Decoder.decodeString.map { s =>
       val local = CaseUtils.toCamelCase(s, true, '_')
       BiolinkTerm(s, IRI(s"$namespace$local"))

@@ -5,8 +5,8 @@ import org.phenoscape.sparql.SPARQLInterpolation._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.SPARQLQueryExecutor.SelectResult
 import org.renci.cam.domain._
-import zio.config.ZConfig
 import zio._
+import zio.config.ZConfig
 
 object QueryService {
 
@@ -31,8 +31,8 @@ object QueryService {
         .map { queryNode =>
           val (_, queryVar, _) = nodeMap(queryNode.id)
           val nodeIRI = IRI(solution.getResource(queryVar).getURI)
-          //val nameOpt = Option(solution.getLiteral(s"${queryVar}_label")).map(_.getLexicalForm)
-          val trapiNode = TRAPINode(nodeIRI, None, queryNode.`type`.toList)
+          val nameOpt = Option(solution.getLiteral(s"${queryVar}_label")).map(_.getLexicalForm)
+          val trapiNode = TRAPINode(nodeIRI, nameOpt, queryNode.`type`.toList)
           val trapiNodeBinding = TRAPINodeBinding(Some(queryNode.id), nodeIRI)
           (trapiNodeBinding, trapiNode)
         }
@@ -68,25 +68,33 @@ object QueryService {
     val nodesToVariables = queryGraph.nodes.zipWithIndex.map { case (node, index) =>
       val nodeVarName = s"n$index"
       val nodeVar = QueryText(s"?$nodeVarName")
-      val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
-      //val nodeLabelVar = QueryText(s"?${nodeVarName}__label")
-      val nodeValues = node.curie
-        .map(Set(_))
-        .getOrElse {
-          (for {
-            blt <- node.`type`
-            mappings <- mappingsClosure.get(blt.shorthand.replaceAllLiterally("_", " ")) //FIXME this is hacky
-          } yield mappings).getOrElse(Set.empty)
-        }
-        .map(prop => sparql"$prop ")
-        .reduceOption(_ + _)
-        .getOrElse(sparql"")
-      //OPTIONAL { $nodeVar $RDFSLabel $nodeLabelVar }
-      val sparql = sparql"""
-        $nodeVar $RDFSSubClassOf $nodeSuperVar .
-        VALUES $nodeSuperVar { $nodeValues }
+      val nodeLabelVar = QueryText(s"?${nodeVarName}_label")
+      val nodeSPARQL = if (node.curie.isEmpty) {
+        node.`type`
+          .map { blt =>
+            if (blt.shorthand == "named_thing") sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
+            else {
+              val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
+              val mappings = mappingsClosure.get(blt.shorthand.replaceAllLiterally("_", " ")).toSet.flatten //FIXME this is hacky
+              val values = mappings.map(term => sparql"$term ").reduceOption(_ + _).getOrElse(sparql"")
+              sparql"""
+                $nodeVar $RDFSLabel $nodeLabelVar . 
+                $nodeVar $RDFSSubClassOf $nodeSuperVar .
+                VALUES $nodeSuperVar { $values }
+              """
+            }
+          }
+          .getOrElse(sparql"")
+      } else
+        node.curie
+          .map { c =>
+            sparql"""
+              $nodeVar $RDFSLabel $nodeLabelVar . 
+              VALUES $nodeVar { $c }
             """
-      node.id -> (node, nodeVarName, sparql)
+          }
+          .getOrElse(sparql"")
+      node.id -> (node, nodeVarName, nodeSPARQL)
     }.toMap
     val nodeSPARQL = nodesToVariables.values.map(_._3).reduceOption(_ + _).getOrElse(sparql"")
     val edgesToVariables = queryGraph.edges.zipWithIndex.map { case (edge, index) =>
@@ -113,10 +121,10 @@ object QueryService {
     }.toMap
     val edgeSPARQL = edgesToVariables.values.map(_._3).reduceOption(_ + _).getOrElse(sparql"")
     val nodeVariables = nodesToVariables.values.map(_._2)
-    //val nodeLabelMins = nodeVariables.map(v => QueryText(s"(MIN(?${v}__label) AS ?${v}_label) ")).reduceOption(_ + _).getOrElse(sparql"")
-    val allVariables = nodeVariables ++ edgesToVariables.values.map(_._2)
+    val nodeLabelVariables = nodeVariables.map(v => s"${v}_label")
+    val allVariables = nodeVariables ++ nodeLabelVariables ++ edgesToVariables.values.map(_._2)
     val mainVariablesProjection = allVariables.map(v => QueryText(s"?$v ")).reduceOption(_ + _).getOrElse(sparql"")
-    val projection = mainVariablesProjection //+ nodeLabelMins
+    val projection = mainVariablesProjection
     val limitSPARQL = limit.map(l => sparql"LIMIT $l").getOrElse(sparql"")
     val query = sparql"""
       SELECT DISTINCT $projection
@@ -126,10 +134,10 @@ object QueryService {
       }
       $limitSPARQL
           """
-    //GROUP BY $mainVariablesProjection
     (nodesToVariables, edgesToVariables, query.toQuery)
   }
 
+  // This is an optimization for the main query, which runs much faster with fewer possible predicates
   def getKnownPredicates: ZIO[ZConfig[AppConfig] with HttpClient, Throwable, Set[IRI]] = {
     val query =
       sparql"""
