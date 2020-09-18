@@ -48,7 +48,6 @@ object SPARQLQueryExecutor extends LazyLogging {
       client <- HttpClient.client
       uri = appConfig.sparqlEndpoint
       _ = logger.debug("query: {}", query)
-      _ = println(query)
       request = Request[Task](Method.POST, uri).withEntity(query)
       response <- client.expect[ResultSet](request)
       vars = response.getResultVars.asScala.toList
