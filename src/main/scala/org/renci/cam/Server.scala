@@ -4,6 +4,7 @@ import cats.implicits._
 import io.circe.generic.auto._
 import io.circe.{Decoder, Encoder, Printer}
 import org.http4s._
+import org.http4s.dsl.impl.Root
 import org.http4s.implicits._
 import org.http4s.server.Router
 import org.http4s.server.blaze.BlazeServerBuilder
@@ -82,7 +83,7 @@ object Server extends App {
         //openAPI = List(queryEndpoint, predicatesEndpoint).toOpenAPI("CAM-KP API", "0.1").toYaml
         openAPI = List(queryEndpoint).toOpenAPI("CAM-KP API", "0.1").toYaml
         docsRoute = new SwaggerHttp4s(openAPI).routes[Task]
-        httpApp = Router("/" -> (routes <+> docsRoute)).orNotFound
+        httpApp = Router("" -> (routes <+> docsRoute)).orNotFound
         httpAppWithLogging = Logger.httpApp(true, false)(httpApp)
         result <-
           BlazeServerBuilder[Task](runtime.platform.executor.asEC)
