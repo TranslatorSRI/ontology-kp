@@ -79,8 +79,10 @@ object QueryService {
               val values = mappings.map(term => sparql"$term ").reduceOption(_ + _).getOrElse(sparql"")
               sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
-                $nodeVar $RDFSSubClassOf $nodeSuperVar .
-                VALUES $nodeSuperVar { $values }
+                FILTER EXISTS {
+                  $nodeVar $RDFSSubClassOf $nodeSuperVar .
+                  VALUES $nodeSuperVar { $values }
+                }
               """
             }
           }
