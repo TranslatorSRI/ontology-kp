@@ -1,5 +1,8 @@
 package org.renci.cam
 
+import java.nio.charset.StandardCharsets
+
+import org.apache.commons.codec.digest.DigestUtils
 import org.apache.jena.query.Query
 import org.phenoscape.sparql.SPARQLInterpolation._
 import org.renci.cam.HttpClient.HttpClient
@@ -47,7 +50,8 @@ object QueryService {
             val sourceIRI = IRI(solution.getResource(sourceVar).getURI)
             val targetIRI = IRI(solution.getResource(targetVar).getURI)
             val predicateIRI = IRI(solution.getResource(predicateVar).getURI)
-            val edgeKGID = s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}"
+            val edgeKGID =
+              DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
             val trapiEdge = TRAPIEdge(edgeKGID, sourceIRI, targetIRI, queryEdge.`type`)
             val trapiEdgeBinding = TRAPIEdgeBinding(Some(queryEdge.id), edgeKGID)
             (trapiEdgeBinding, trapiEdge)
