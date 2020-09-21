@@ -99,6 +99,7 @@ object Server extends App {
         openAPI = List(queryEndpoint)
           .toOpenAPI("SPARQL-KP API", "0.1")
           .copy(info = openAPIInfo)
+          .copy(tags = List(sttp.tapir.openapi.Tag("translator")))
           .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
           .toYaml
         docsRoute = swaggerRoutes(openAPI)
