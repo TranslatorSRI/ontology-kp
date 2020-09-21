@@ -18,6 +18,7 @@ import org.renci.cam.Utilities._
 import org.renci.cam.domain._
 import sttp.tapir.docs.openapi._
 import sttp.tapir.json.circe._
+import sttp.tapir.openapi.{Contact, Info, License}
 import sttp.tapir.openapi.circe.yaml._
 import sttp.tapir.server.http4s.ztapir._
 import sttp.tapir.swagger.http4s.SwaggerHttp4s
@@ -76,6 +77,15 @@ object Server extends App {
       program.mapError(error => error.getMessage)
     }
 
+  val openAPIInfo: Info = Info(
+    "SPARQL-KP API",
+    "0.1",
+    Some("TRAPI interface to integrated ontology knowledgebase"),
+    Some("https://opensource.org/licenses/MIT"),
+    Some(Contact(Some("Jim Balhoff"), Some("balhoff@renci.org"), None)),
+    Some(License("MIT License", Some("https://opensource.org/licenses/MIT")))
+  )
+
   val server: RIO[ZConfig[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink], Unit] =
     ZIO.runtime[Any].flatMap { implicit runtime =>
       for {
@@ -87,6 +97,7 @@ object Server extends App {
         // will be available at /docs
         openAPI = List(queryEndpoint)
           .toOpenAPI("SPARQL-KP API", "0.1")
+          .copy(info = openAPIInfo)
           .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
           .toYaml
         docsRoute = swaggerRoutes(openAPI)
