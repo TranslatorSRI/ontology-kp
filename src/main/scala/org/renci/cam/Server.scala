@@ -61,6 +61,7 @@ object Server extends App {
         .in(jsonBody[TRAPIQueryRequestBody])
         .errorOut(stringBody)
         .out(jsonBody[TRAPIMessage])
+        .summary("Submit a TRAPI question graph and retrieve matching solutions")
     }
   }
 
