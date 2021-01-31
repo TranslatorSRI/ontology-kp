@@ -10,7 +10,12 @@ import org.renci.cam.domain.IRI
 import zio._
 import zio.interop.catz._
 
-final case class BiolinkTerm(is_a: Option[String], mixins: Option[List[String]], subclass_of: Option[IRI], mappings: Option[List[IRI]])
+final case class BiolinkTerm(is_a: Option[String],
+                             mixins: Option[List[String]],
+                             subclass_of: Option[IRI],
+                             mappings: Option[List[IRI]],
+                             exact_mappings: Option[List[IRI]],
+                             narrow_mappings: Option[List[IRI]])
 
 final case class Biolink(classes: Map[String, BiolinkTerm], slots: Map[String, BiolinkTerm])
 
@@ -47,7 +52,11 @@ object Biolink {
     (for {
       (term, descendants) <- reflexiveTermsToDescendants
       descendantBiolinkTerms = descendants.flatMap(d => allTerms.get(d))
-      mappings = descendantBiolinkTerms.flatMap(t => t.subclass_of.toList ::: t.mappings.toList.flatten)
+      mappings = descendantBiolinkTerms.flatMap(t =>
+        t.subclass_of.toList
+          ::: t.mappings.toList.flatten
+          ::: t.exact_mappings.toList.flatten
+          ::: t.narrow_mappings.toList.flatten)
     } yield term -> mappings).toMap
   }
 
