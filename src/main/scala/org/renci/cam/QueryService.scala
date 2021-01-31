@@ -3,7 +3,7 @@ package org.renci.cam
 import java.nio.charset.StandardCharsets
 
 import org.apache.commons.codec.digest.DigestUtils
-import org.apache.jena.query.Query
+import org.apache.jena.query.{Query, QuerySolution}
 import org.phenoscape.sparql.SPARQLInterpolation._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.SPARQLQueryExecutor.SelectResult
@@ -29,39 +29,40 @@ object QueryService {
 
   def makeResultMessage(results: SelectResult, queryGraph: TRAPIQueryGraph, nodeMap: NodeMap, edgeMap: EdgeMap): TRAPIMessage = {
     val (trapiResults, nodes, edges) = results.solutions.map { solution =>
-      val (trapiNodeBindings, trapiNodes) = queryGraph.nodes
-        .toSet[TRAPIQueryNode]
-        .map { queryNode =>
-          val (_, queryVar, _) = nodeMap(queryNode.id)
-          val nodeIRI = IRI(solution.getResource(queryVar).getURI)
-          val nameOpt = Option(solution.getLiteral(s"${queryVar}_label")).map(_.getLexicalForm)
-          val trapiNode = TRAPINode(nodeIRI, nameOpt, queryNode.`type`.toList)
-          val trapiNodeBinding = TRAPINodeBinding(Some(queryNode.id), nodeIRI)
-          (trapiNodeBinding, trapiNode)
-        }
-        .unzip
+      val (trapiNodeBindings, trapiNodes) = queryGraph.nodes.toSet[TRAPIQueryNode].map(responseForQueryNode(_, solution, nodeMap)).unzip
       val (trapiEdgeBindings, trapiEdges) =
-        queryGraph.edges
-          .toSet[TRAPIQueryEdge]
-          .map { queryEdge =>
-            val (_, sourceVar, _) = nodeMap(queryEdge.source_id)
-            val (_, targetVar, _) = nodeMap(queryEdge.target_id)
-            val (_, predicateVar, _) = edgeMap(queryEdge.id)
-            val sourceIRI = IRI(solution.getResource(sourceVar).getURI)
-            val targetIRI = IRI(solution.getResource(targetVar).getURI)
-            val predicateIRI = IRI(solution.getResource(predicateVar).getURI)
-            val edgeKGID =
-              DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
-            val trapiEdge = TRAPIEdge(edgeKGID, sourceIRI, targetIRI, queryEdge.`type`)
-            val trapiEdgeBinding = TRAPIEdgeBinding(Some(queryEdge.id), edgeKGID)
-            (trapiEdgeBinding, trapiEdge)
-          }
-          .unzip
+        queryGraph.edges.toSet[TRAPIQueryEdge].map(responseForQueryEdge(_, solution, nodeMap, edgeMap)).unzip
       val trapiResult = TRAPIResult(trapiNodeBindings.toList, trapiEdgeBindings.toList)
       (trapiResult, trapiNodes, trapiEdges)
     }.unzip3
     val kg = TRAPIKnowledgeGraph(nodes.toSet.flatten.toList, edges.toSet.flatten.toList)
     TRAPIMessage(Some(queryGraph), Some(kg), Some(trapiResults))
+  }
+
+  private def responseForQueryNode(queryNode: TRAPIQueryNode, solution: QuerySolution, nodeMap: NodeMap): (TRAPINodeBinding, TRAPINode) = {
+    val (_, queryVar, _) = nodeMap(queryNode.id)
+    val nodeIRI = IRI(solution.getResource(queryVar).getURI)
+    val nameOpt = Option(solution.getLiteral(s"${queryVar}_label")).map(_.getLexicalForm)
+    val trapiNode = TRAPINode(nodeIRI, nameOpt, queryNode.`type`.toList)
+    val trapiNodeBinding = TRAPINodeBinding(Some(queryNode.id), nodeIRI)
+    (trapiNodeBinding, trapiNode)
+  }
+
+  private def responseForQueryEdge(queryEdge: TRAPIQueryEdge,
+                                   solution: QuerySolution,
+                                   nodeMap: NodeMap,
+                                   edgeMap: EdgeMap): (TRAPIEdgeBinding, TRAPIEdge) = {
+    val (_, sourceVar, _) = nodeMap(queryEdge.source_id)
+    val (_, targetVar, _) = nodeMap(queryEdge.target_id)
+    val (_, predicateVar, _) = edgeMap(queryEdge.id)
+    val sourceIRI = IRI(solution.getResource(sourceVar).getURI)
+    val targetIRI = IRI(solution.getResource(targetVar).getURI)
+    val predicateIRI = IRI(solution.getResource(predicateVar).getURI)
+    val edgeKGID =
+      DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
+    val trapiEdge = TRAPIEdge(edgeKGID, sourceIRI, targetIRI, queryEdge.`type`)
+    val trapiEdgeBinding = TRAPIEdgeBinding(Some(queryEdge.id), edgeKGID)
+    (trapiEdgeBinding, trapiEdge)
   }
 
   def makeSPARQL(queryGraph: TRAPIQueryGraph,
