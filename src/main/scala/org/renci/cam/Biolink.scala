@@ -30,8 +30,7 @@ object Biolink {
       }
     } yield biolink
 
-  /**
-    * Map from a Biolink term name to all external IRIs for it and its descendants
+  /** Map from a Biolink term name to all external IRIs for it and its descendants
     */
   def mappingsClosure(biolink: Biolink): Map[String, Set[IRI]] = {
     val allTerms = biolink.classes ++ biolink.slots
