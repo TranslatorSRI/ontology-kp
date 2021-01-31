@@ -13,6 +13,7 @@ import org.http4s.implicits._
 import org.http4s.server.Router
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.middleware.{Logger, _}
+import io.circe.yaml.syntax._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.Utilities._
 import org.renci.cam.domain._
@@ -102,7 +103,20 @@ object Server extends App {
           .copy(tags = List(sttp.tapir.openapi.Tag("translator")))
           .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
           .toYaml
-        docsRoute = swaggerRoutes(openAPI)
+        openAPIJson <- ZIO.fromEither(io.circe.yaml.parser.parse(openAPI))
+        info: String = """
+             {
+                "info": {
+                  "x-translator": {
+                    "component": "KP",
+                    "team": "SRI"
+                  }
+                }
+             }
+          """
+        infoJson <- ZIO.fromEither(io.circe.parser.parse(info))
+        openAPIExtended = infoJson.deepMerge(openAPIJson).asYaml.spaces2
+        docsRoute = swaggerRoutes(openAPIExtended)
         httpApp = Router("" -> (routes <+> docsRoute)).orNotFound
         httpAppWithLogging = Logger.httpApp(true, false)(httpApp)
         result <-
@@ -126,8 +140,7 @@ object Server extends App {
   override def run(args: List[String]): ZIO[ZEnv, Nothing, ExitCode] =
     (for {
       httpClientLayer <- HttpClient.makeHttpClientLayer
-      providedPrefixesLayer = httpClientLayer >>> prefixesLayer
-      appLayer = httpClientLayer ++ providedPrefixesLayer ++ configLayer ++ ((httpClientLayer ++ providedPrefixesLayer) >>> biolinkLayer)
+      appLayer = httpClientLayer >+> prefixesLayer >+> biolinkLayer ++ configLayer
       out <- server.provideLayer(appLayer)
     } yield out).exitCode
 
