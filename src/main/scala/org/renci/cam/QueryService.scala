@@ -29,40 +29,48 @@ object QueryService {
 
   def makeResultMessage(results: SelectResult, queryGraph: TRAPIQueryGraph, nodeMap: NodeMap, edgeMap: EdgeMap): TRAPIMessage = {
     val (trapiResults, nodes, edges) = results.solutions.map { solution =>
-      val (trapiNodeBindings, trapiNodes) = queryGraph.nodes.toSet[TRAPIQueryNode].map(responseForQueryNode(_, solution, nodeMap)).unzip
+      val (trapiNodeBindings, trapiNodes) = queryGraph.nodes.map { case (nodeLocalID, queryNode) =>
+        responseForQueryNode(nodeLocalID, queryNode, solution, nodeMap)
+      }.unzip
       val (trapiEdgeBindings, trapiEdges) =
-        queryGraph.edges.toSet[TRAPIQueryEdge].map(responseForQueryEdge(_, solution, nodeMap, edgeMap)).unzip
-      val trapiResult = TRAPIResult(trapiNodeBindings.toList, trapiEdgeBindings.toList)
+        queryGraph.edges.map { case (edgeLocalID, queryEdge) =>
+          responseForQueryEdge(edgeLocalID, queryEdge, solution, nodeMap, edgeMap)
+        }.unzip
+      val trapiResult = TRAPIResult(trapiNodeBindings.toMap, trapiEdgeBindings.toMap)
       (trapiResult, trapiNodes, trapiEdges)
     }.unzip3
-    val kg = TRAPIKnowledgeGraph(nodes.toSet.flatten.toList, edges.toSet.flatten.toList)
+    val kg = TRAPIKnowledgeGraph(nodes.flatten.toMap, edges.flatten.toMap)
     TRAPIMessage(Some(queryGraph), Some(kg), Some(trapiResults))
   }
 
-  private def responseForQueryNode(queryNode: TRAPIQueryNode, solution: QuerySolution, nodeMap: NodeMap): (TRAPINodeBinding, TRAPINode) = {
-    val (_, queryVar, _) = nodeMap(queryNode.id)
+  private def responseForQueryNode(nodeLocalID: String,
+                                   queryNode: TRAPIQueryNode,
+                                   solution: QuerySolution,
+                                   nodeMap: NodeMap): ((String, TRAPINodeBinding), (IRI, TRAPINode)) = {
+    val (_, queryVar, _) = nodeMap(nodeLocalID)
     val nodeIRI = IRI(solution.getResource(queryVar).getURI)
     val nameOpt = Option(solution.getLiteral(s"${queryVar}_label")).map(_.getLexicalForm)
-    val trapiNode = TRAPINode(nodeIRI, nameOpt, queryNode.`type`.toList)
-    val trapiNodeBinding = TRAPINodeBinding(Some(queryNode.id), nodeIRI)
-    (trapiNodeBinding, trapiNode)
+    val trapiNode = TRAPINode(nameOpt, queryNode.category.toList)
+    val trapiNodeBinding = TRAPINodeBinding(nodeIRI)
+    (nodeLocalID -> trapiNodeBinding, nodeIRI -> trapiNode)
   }
 
-  private def responseForQueryEdge(queryEdge: TRAPIQueryEdge,
+  private def responseForQueryEdge(edgeLocalID: String,
+                                   queryEdge: TRAPIQueryEdge,
                                    solution: QuerySolution,
                                    nodeMap: NodeMap,
-                                   edgeMap: EdgeMap): (TRAPIEdgeBinding, TRAPIEdge) = {
-    val (_, sourceVar, _) = nodeMap(queryEdge.source_id)
-    val (_, targetVar, _) = nodeMap(queryEdge.target_id)
-    val (_, predicateVar, _) = edgeMap(queryEdge.id)
+                                   edgeMap: EdgeMap): ((String, TRAPIEdgeBinding), (String, TRAPIEdge)) = {
+    val (_, sourceVar, _) = nodeMap(queryEdge.subject)
+    val (_, targetVar, _) = nodeMap(queryEdge.`object`)
+    val (_, predicateVar, _) = edgeMap(edgeLocalID)
     val sourceIRI = IRI(solution.getResource(sourceVar).getURI)
     val targetIRI = IRI(solution.getResource(targetVar).getURI)
     val predicateIRI = IRI(solution.getResource(predicateVar).getURI)
     val edgeKGID =
       DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
-    val trapiEdge = TRAPIEdge(edgeKGID, sourceIRI, targetIRI, queryEdge.`type`)
-    val trapiEdgeBinding = TRAPIEdgeBinding(Some(queryEdge.id), edgeKGID)
-    (trapiEdgeBinding, trapiEdge)
+    val trapiEdge = TRAPIEdge(queryEdge.predicate, sourceIRI, targetIRI)
+    val trapiEdgeBinding = TRAPIEdgeBinding(edgeKGID)
+    ((edgeLocalID, trapiEdgeBinding), (edgeKGID, trapiEdge))
   }
 
   def makeSPARQL(queryGraph: TRAPIQueryGraph,
@@ -70,17 +78,17 @@ object QueryService {
                  limit: Option[Int],
                  knownPredicates: Set[IRI]): (NodeMap, EdgeMap, Query) = {
     val mappingsClosure = Biolink.mappingsClosure(biolink)
-    val nodesToVariables = queryGraph.nodes.zipWithIndex.map { case (node, index) =>
+    val nodesToVariables = queryGraph.nodes.zipWithIndex.map { case ((nodeLocalID, node), index) =>
       val nodeVarName = s"n$index"
       val nodeVar = QueryText(s"?$nodeVarName")
       val nodeLabelVar = QueryText(s"?${nodeVarName}_label")
-      val nodeSPARQL = if (node.curie.isEmpty) {
-        node.`type`
+      val nodeSPARQL = if (node.id.isEmpty) {
+        node.category
           .map { blt =>
-            if (blt.shorthand == "named_thing") sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
+            if (blt.shorthand == "NamedThing") sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
             else {
               val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
-              val mappings = mappingsClosure.get(blt.shorthand.replaceAllLiterally("_", " ")).toSet.flatten //FIXME this is hacky
+              val mappings = mappingsClosure.get(blt.shorthand).toSet.flatten
               val values = mappings.map(term => sparql"$term ").reduceOption(_ + _).getOrElse(sparql"")
               sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
@@ -93,7 +101,7 @@ object QueryService {
           }
           .getOrElse(sparql"")
       } else
-        node.curie
+        node.id
           .map { c =>
             sparql"""
               $nodeVar $RDFSLabel $nodeLabelVar . 
@@ -101,31 +109,31 @@ object QueryService {
             """
           }
           .getOrElse(sparql"")
-      node.id -> (node, nodeVarName, nodeSPARQL)
-    }.toMap
+      nodeLocalID -> (node, nodeVarName, nodeSPARQL)
+    }
     val nodeSPARQL = nodesToVariables.values.map(_._3).reduceOption(_ + _).getOrElse(sparql"")
-    val edgesToVariables = queryGraph.edges.zipWithIndex.map { case (edge, index) =>
+    val edgesToVariables = queryGraph.edges.zipWithIndex.map { case ((edgeLocalID, edge), index) =>
       val pred = s"e$index"
       val predVar = QueryText(s"?$pred")
-      val edgeType = edge.`type`.map(_.shorthand).getOrElse("related_to")
+      val edgeType = edge.predicate.map(_.shorthand).getOrElse("related_to")
       //FIXME replacement is hacky
       val edgeValues = mappingsClosure
-        .getOrElse(edgeType.replaceAllLiterally("_", " "), Set.empty)
+        .getOrElse(edgeType, Set.empty)
         .filter(knownPredicates)
         .map(prop => sparql"$prop ")
         .reduceOption(_ + _)
         .getOrElse(sparql"")
       val sparql = (for {
-        subj <- nodesToVariables.get(edge.source_id).map(_._2)
+        subj <- nodesToVariables.get(edge.subject).map(_._2)
         subjVar = QueryText(s"?$subj")
-        obj <- nodesToVariables.get(edge.target_id).map(_._2)
+        obj <- nodesToVariables.get(edge.`object`).map(_._2)
         objVar = QueryText(s"?$obj")
       } yield sparql"""
                 $subjVar $predVar $objVar .
                 VALUES $predVar { $edgeValues }
               """).getOrElse(sparql"")
-      edge.id -> (edge, pred, sparql)
-    }.toMap
+      edgeLocalID -> (edge, pred, sparql)
+    }
     val edgeSPARQL = edgesToVariables.values.map(_._3).reduceOption(_ + _).getOrElse(sparql"")
     val nodeVariables = nodesToVariables.values.map(_._2)
     val nodeLabelVariables = nodeVariables.map(v => s"${v}_label")

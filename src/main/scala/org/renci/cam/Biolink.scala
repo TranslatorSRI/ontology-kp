@@ -2,6 +2,7 @@ package org.renci.cam
 
 import io.circe.generic.auto._
 import io.circe.{yaml, Decoder}
+import org.apache.commons.text.CaseUtils
 import org.http4s.implicits._
 import org.http4s.{Method, Request}
 import org.renci.cam.HttpClient.HttpClient
@@ -38,7 +39,11 @@ object Biolink {
   /** Map from a Biolink term name to all external IRIs for it and its descendants
     */
   def mappingsClosure(biolink: Biolink): Map[String, Set[IRI]] = {
-    val allTerms = biolink.classes ++ biolink.slots
+    val allTerms = biolink.classes.map { case (key, value) =>
+      (CaseUtils.toCamelCase(key, true, ' '), value)
+    } ++ biolink.slots.map { case (key, value) =>
+      (key.replaceAllLiterally(" ", "_"), value)
+    }
     def ancestors(term: String): Set[String] = allTerms.get(term).toSet[BiolinkTerm].flatMap { t =>
       val parents = (t.is_a.toList ::: t.mixins.toList.flatten).toSet
       if (parents.isEmpty) parents
