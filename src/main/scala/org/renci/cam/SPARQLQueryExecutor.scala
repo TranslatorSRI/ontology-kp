@@ -15,7 +15,7 @@ import zio.config.ZConfig
 import zio.interop.catz._
 import zio.{RIO, Task, ZIO, config => _}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 object SPARQLQueryExecutor extends LazyLogging {
 
@@ -50,8 +50,8 @@ object SPARQLQueryExecutor extends LazyLogging {
       _ = logger.debug("query: {}", query)
       request = Request[Task](Method.POST, uri).withEntity(query)
       response <- client.expect[ResultSet](request)
-      vars = response.getResultVars.asScala.toList
-      results = response.asScala.toList
+      vars = response.getResultVars.asScala.to(List)
+      results = response.asScala.to(List)
     } yield SelectResult(vars, results)
 
   final case class SelectResult(vars: List[String], solutions: List[QuerySolution])

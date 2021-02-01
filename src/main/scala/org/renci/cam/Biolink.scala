@@ -42,7 +42,7 @@ object Biolink {
     val allTerms = biolink.classes.map { case (key, value) =>
       (CaseUtils.toCamelCase(key, true, ' '), value)
     } ++ biolink.slots.map { case (key, value) =>
-      (key.replaceAllLiterally(" ", "_"), value)
+      (key.replace(" ", "_"), value)
     }
     def ancestors(term: String): Set[String] = allTerms.get(term).toSet[BiolinkTerm].flatMap { t =>
       val parents = (t.is_a.toList ::: t.mixins.toList.flatten).toSet
@@ -53,7 +53,7 @@ object Biolink {
       name <- allTerms.keys
       ancestor <- ancestors(name) + name
     } yield ancestor -> name
-    val reflexiveTermsToDescendants = reflexiveTermsToDescendantsPairs.groupBy(_._1).mapValues(_.map(_._2).toSet).toList.toMap
+    val reflexiveTermsToDescendants = reflexiveTermsToDescendantsPairs.groupBy(_._1).view.mapValues(_.map(_._2).toSet).to(List).to(Map)
     (for {
       (term, descendants) <- reflexiveTermsToDescendants
       descendantBiolinkTerms = descendants.flatMap(d => allTerms.get(d))

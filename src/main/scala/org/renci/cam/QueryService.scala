@@ -50,7 +50,7 @@ object QueryService {
     val (_, queryVar, _) = nodeMap(nodeLocalID)
     val nodeIRI = IRI(solution.getResource(queryVar).getURI)
     val nameOpt = Option(solution.getLiteral(s"${queryVar}_label")).map(_.getLexicalForm)
-    val trapiNode = TRAPINode(nameOpt, queryNode.category.toList)
+    val trapiNode = TRAPINode(nameOpt, queryNode.category.to(List))
     val trapiNodeBinding = TRAPINodeBinding(nodeIRI)
     (nodeLocalID -> trapiNodeBinding, nodeIRI -> trapiNode)
   }
@@ -78,62 +78,66 @@ object QueryService {
                  limit: Option[Int],
                  knownPredicates: Set[IRI]): (NodeMap, EdgeMap, Query) = {
     val mappingsClosure = Biolink.mappingsClosure(biolink)
-    val nodesToVariables = queryGraph.nodes.zipWithIndex.map { case ((nodeLocalID, node), index) =>
-      val nodeVarName = s"n$index"
-      val nodeVar = QueryText(s"?$nodeVarName")
-      val nodeLabelVar = QueryText(s"?${nodeVarName}_label")
-      val nodeSPARQL = if (node.id.isEmpty) {
-        node.category
-          .map { blt =>
-            if (blt.shorthand == "NamedThing") sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
-            else {
-              val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
-              val mappings = mappingsClosure.get(blt.shorthand).toSet.flatten
-              val values = mappings.map(term => sparql"$term ").reduceOption(_ + _).getOrElse(sparql"")
-              sparql"""
+    val nodesToVariables = queryGraph.nodes.zipWithIndex
+      .map { case ((nodeLocalID, node), index) =>
+        val nodeVarName = s"n$index"
+        val nodeVar = QueryText(s"?$nodeVarName")
+        val nodeLabelVar = QueryText(s"?${nodeVarName}_label")
+        val nodeSPARQL = if (node.id.isEmpty) {
+          node.category
+            .map { blt =>
+              if (blt.shorthand == "NamedThing") sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
+              else {
+                val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
+                val mappings = mappingsClosure.get(blt.shorthand).to(Set).flatten
+                val values = mappings.map(term => sparql"$term ").reduceOption(_ + _).getOrElse(sparql"")
+                sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
                 FILTER EXISTS {
                   $nodeVar $RDFSSubClassOf $nodeSuperVar .
                   VALUES $nodeSuperVar { $values }
                 }
               """
+              }
             }
-          }
-          .getOrElse(sparql"")
-      } else
-        node.id
-          .map { c =>
-            sparql"""
+            .getOrElse(sparql"")
+        } else
+          node.id
+            .map { c =>
+              sparql"""
               $nodeVar $RDFSLabel $nodeLabelVar . 
               VALUES $nodeVar { $c }
             """
-          }
-          .getOrElse(sparql"")
-      nodeLocalID -> (node, nodeVarName, nodeSPARQL)
-    }
+            }
+            .getOrElse(sparql"")
+        nodeLocalID -> (node, nodeVarName, nodeSPARQL)
+      }
+      .to(Map)
     val nodeSPARQL = nodesToVariables.values.map(_._3).reduceOption(_ + _).getOrElse(sparql"")
-    val edgesToVariables = queryGraph.edges.zipWithIndex.map { case ((edgeLocalID, edge), index) =>
-      val pred = s"e$index"
-      val predVar = QueryText(s"?$pred")
-      val edgeType = edge.predicate.map(_.shorthand).getOrElse("related_to")
-      //FIXME replacement is hacky
-      val edgeValues = mappingsClosure
-        .getOrElse(edgeType, Set.empty)
-        .filter(knownPredicates)
-        .map(prop => sparql"$prop ")
-        .reduceOption(_ + _)
-        .getOrElse(sparql"")
-      val sparql = (for {
-        subj <- nodesToVariables.get(edge.subject).map(_._2)
-        subjVar = QueryText(s"?$subj")
-        obj <- nodesToVariables.get(edge.`object`).map(_._2)
-        objVar = QueryText(s"?$obj")
-      } yield sparql"""
+    val edgesToVariables = queryGraph.edges.zipWithIndex
+      .map { case ((edgeLocalID, edge), index) =>
+        val pred = s"e$index"
+        val predVar = QueryText(s"?$pred")
+        val edgeType = edge.predicate.map(_.shorthand).getOrElse("related_to")
+        //FIXME replacement is hacky
+        val edgeValues = mappingsClosure
+          .getOrElse(edgeType, Set.empty)
+          .filter(knownPredicates)
+          .map(prop => sparql"$prop ")
+          .reduceOption(_ + _)
+          .getOrElse(sparql"")
+        val sparql = (for {
+          subj <- nodesToVariables.get(edge.subject).map(_._2)
+          subjVar = QueryText(s"?$subj")
+          obj <- nodesToVariables.get(edge.`object`).map(_._2)
+          objVar = QueryText(s"?$obj")
+        } yield sparql"""
                 $subjVar $predVar $objVar .
                 VALUES $predVar { $edgeValues }
               """).getOrElse(sparql"")
-      edgeLocalID -> (edge, pred, sparql)
-    }
+        edgeLocalID -> (edge, pred, sparql)
+      }
+      .to(Map)
     val edgeSPARQL = edgesToVariables.values.map(_._3).reduceOption(_ + _).getOrElse(sparql"")
     val nodeVariables = nodesToVariables.values.map(_._2)
     val nodeLabelVariables = nodeVariables.map(v => s"${v}_label")
@@ -163,7 +167,7 @@ object QueryService {
       """.toQuery
     for {
       result <- SPARQLQueryExecutor.runSelectQuery(query)
-    } yield result.solutions.map(qs => IRI(qs.getResource("p").getURI)).toSet
+    } yield result.solutions.map(qs => IRI(qs.getResource("p").getURI)).to(Set)
   }
 
 }

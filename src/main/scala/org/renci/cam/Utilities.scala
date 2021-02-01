@@ -60,7 +60,7 @@ object Utilities {
       source <- Managed.fromAutoCloseable(Task.effect(Source.fromInputStream(fileStream)))
     } yield source
     for {
-      prefixesStr <- sourceManaged.use(source => ZIO.effect(source.getLines.mkString))
+      prefixesStr <- sourceManaged.use(source => ZIO.effect(source.getLines().mkString))
       prefixesJson <- ZIO.fromEither(parse(prefixesStr))
       prefixes <- ZIO.fromEither(prefixesJson.as[Map[String, String]])
     } yield prefixes
