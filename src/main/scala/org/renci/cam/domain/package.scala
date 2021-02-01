@@ -10,6 +10,21 @@ import org.phenoscape.sparql.SPARQLInterpolation._
 
 package object domain {
 
+  private val Curie = "^([^:]*):(.*)$".r
+  private val Protocols = Set("http", "https", "ftp", "file", "mailto")
+
+  private def expandCURIEString(curieString: String, prefixesMap: Map[String, String]): Either[DecodingFailure, IRI] =
+    for {
+      curie <- curieString match {
+        case Curie(p, l) => Right((p, l))
+        case _ => Left(DecodingFailure(s"CURIE is malformed: $curieString", Nil))
+      }
+      (prefix, local) = curie
+      namespace <-
+        if (Protocols(prefix)) Right(s"$prefix:")
+        else prefixesMap.get(prefix).toRight(DecodingFailure(s"No prefix expansion found for $prefix:$local", Nil))
+    } yield IRI(s"$namespace$local")
+
   final case class BiolinkTerm(shorthand: String, iri: IRI)
 
   object BiolinkTerm {
@@ -17,9 +32,8 @@ package object domain {
     val namespace: String = "https://w3id.org/biolink/vocab/"
 
     //FIXME would be good to check that this is a known Biolink term rather than just accepting
-    implicit val decoder: Decoder[BiolinkTerm] = Decoder.decodeString.map { s =>
-      val local = CaseUtils.toCamelCase(s, true, '_')
-      BiolinkTerm(s, IRI(s"$namespace$local"))
+    implicit val decoder: Decoder[BiolinkTerm] = IRI.makeDecoder(Map("biolink" -> namespace)).map { iri =>
+      BiolinkTerm(iri.value.replace(namespace, ""), iri)
     }
 
 //    def makeDecoder(biolinkModel: Map[String, IRI]): Decoder[BiolinkTerm] = new Decoder[BiolinkTerm] {
@@ -31,7 +45,7 @@ package object domain {
 //
 //    }
 
-    implicit val encoder: Encoder[BiolinkTerm] = Encoder.encodeString.contramap(blTerm => blTerm.shorthand)
+    implicit val encoder: Encoder[BiolinkTerm] = Encoder.encodeString.contramap(blTerm => s"biolink:${blTerm.shorthand}")
 
   }
 
@@ -39,20 +53,17 @@ package object domain {
 
   object IRI {
 
-    private val Curie = "^([^:]*):(.*)$".r
-
     def makeDecoder(prefixesMap: Map[String, String]): Decoder[IRI] = new Decoder[IRI] {
-
-      private val protocols = Set("http", "https", "ftp", "file", "mailto")
 
       override def apply(c: HCursor): Result[IRI] = for {
         value <- c.value.as[String]
-        Curie(prefix, local) = value
-        namespace <-
-          if (protocols(prefix)) Right(prefix)
-          else prefixesMap.get(prefix).toRight(DecodingFailure(s"No prefix expansion found for $prefix:$local", Nil))
-      } yield IRI(s"$namespace$local")
+        iri <- expandCURIEString(value, prefixesMap)
+      } yield iri
 
+    }
+
+    def makeKeyDecoder(prefixesMap: Map[String, String]): KeyDecoder[IRI] = new KeyDecoder[IRI] {
+      override def apply(key: String): Option[IRI] = expandCURIEString(key, prefixesMap).toOption
     }
 
     def makeEncoder(prefixesMap: Map[String, String]): Encoder[IRI] = Encoder.encodeString.contramap { iri =>
@@ -63,7 +74,15 @@ package object domain {
       } else iri.value
     }
 
-    implicit val embedInSPARQL = SPARQLInterpolator.embed[IRI](Case(SPARQLContext, SPARQLContext) { iri =>
+    def makeKeyEncoder(prefixesMap: Map[String, String]): KeyEncoder[IRI] = KeyEncoder.encodeKeyString.contramap { iri =>
+      val startsWith = prefixesMap.filter { case (prefix, namespace) => iri.value.startsWith(namespace) }
+      if (startsWith.nonEmpty) {
+        val (prefix, namespace) = startsWith.maxBy(_._2.length)
+        s"$prefix:${iri.value.drop(namespace.length)}"
+      } else iri.value
+    }
+
+    implicit val embedInSPARQL: SPARQLEmbedder[IRI] = SPARQLInterpolator.embed[IRI](Case(SPARQLContext, SPARQLContext) { iri =>
       val pss = new ParameterizedSparqlString()
       pss.appendIri(iri.value)
       pss.toString
@@ -71,23 +90,25 @@ package object domain {
 
   }
 
-  final case class TRAPIQueryNode(id: String, `type`: Option[BiolinkTerm], curie: Option[IRI])
+  final case class TRAPIQueryNode(category: Option[BiolinkTerm], id: Option[IRI])
 
-  final case class TRAPIQueryEdge(id: String, source_id: String, target_id: String, `type`: Option[BiolinkTerm])
+  //BiolinkPredicate?
+  final case class TRAPIQueryEdge(predicate: Option[BiolinkTerm], subject: String, `object`: String) //relation
 
-  final case class TRAPIQueryGraph(nodes: List[TRAPIQueryNode], edges: List[TRAPIQueryEdge])
+  final case class TRAPIQueryGraph(nodes: Map[String, TRAPIQueryNode], edges: Map[String, TRAPIQueryEdge])
 
-  final case class TRAPINode(id: IRI, name: Option[String], `type`: List[BiolinkTerm])
+  //BiolinkClass
+  final case class TRAPINode(name: Option[String], category: List[BiolinkTerm])
 
-  final case class TRAPIEdge(id: String, source_id: IRI, target_id: IRI, `type`: Option[BiolinkTerm])
+  final case class TRAPIEdge(predicate: Option[BiolinkTerm], subject: IRI, `object`: IRI)
 
-  final case class TRAPIKnowledgeGraph(nodes: List[TRAPINode], edges: List[TRAPIEdge])
+  final case class TRAPIKnowledgeGraph(nodes: Map[IRI, TRAPINode], edges: Map[String, TRAPIEdge])
 
-  final case class TRAPINodeBinding(qg_id: Option[String], kg_id: IRI)
+  final case class TRAPINodeBinding(id: IRI)
 
-  final case class TRAPIEdgeBinding(qg_id: Option[String], kg_id: String)
+  final case class TRAPIEdgeBinding(id: String)
 
-  final case class TRAPIResult(node_bindings: List[TRAPINodeBinding], edge_bindings: List[TRAPIEdgeBinding])
+  final case class TRAPIResult(node_bindings: Map[String, TRAPINodeBinding], edge_bindings: Map[String, TRAPIEdgeBinding])
 
   final case class TRAPIMessage(query_graph: Option[TRAPIQueryGraph],
                                 knowledge_graph: Option[TRAPIKnowledgeGraph],
