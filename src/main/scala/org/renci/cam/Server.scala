@@ -81,7 +81,7 @@ object Server extends App {
     }
 
   val openAPIInfo: Info = Info(
-    "SPARQL-KP API",
+    "Ontology-KP API",
     "0.1",
     Some("TRAPI interface to integrated ontology knowledgebase"),
     Some("https://opensource.org/licenses/MIT"),
@@ -99,7 +99,7 @@ object Server extends App {
         routes = queryRoute //<+> predicatesRoute
         // will be available at /docs
         openAPI = List(queryEndpoint)
-          .toOpenAPI("SPARQL-KP API", "0.1")
+          .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator")))
           .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
