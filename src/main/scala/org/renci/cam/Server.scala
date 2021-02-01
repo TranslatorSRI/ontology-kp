@@ -2,10 +2,11 @@ package org.renci.cam
 
 import java.util.Properties
 
-import cats.effect.{Blocker, ContextShift, Sync}
+import cats.effect.Blocker
 import cats.implicits._
 import io.circe.generic.auto._
-import io.circe.{Decoder, Encoder, Printer}
+import io.circe.yaml.syntax._
+import io.circe._
 import org.http4s._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.Location
@@ -13,16 +14,14 @@ import org.http4s.implicits._
 import org.http4s.server.Router
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.middleware.{Logger, _}
-import io.circe.yaml.syntax._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.Utilities._
 import org.renci.cam.domain._
 import sttp.tapir.docs.openapi._
 import sttp.tapir.json.circe._
-import sttp.tapir.openapi.{Contact, Info, License}
 import sttp.tapir.openapi.circe.yaml._
+import sttp.tapir.openapi.{Contact, Info, License}
 import sttp.tapir.server.http4s.ztapir._
-import sttp.tapir.swagger.http4s.SwaggerHttp4s
 import sttp.tapir.ztapir._
 import zio.config.typesafe.TypesafeConfig
 import zio.config.{ZConfig, _}
@@ -56,6 +55,8 @@ object Server extends App {
     } yield {
       implicit val iriDecoder: Decoder[IRI] = IRI.makeDecoder(prefixes.prefixesMap)
       implicit val iriEncoder: Encoder[IRI] = IRI.makeEncoder(prefixes.prefixesMap)
+      implicit val iriKeyDecoder: KeyDecoder[IRI] = IRI.makeKeyDecoder(prefixes.prefixesMap)
+      implicit val iriKeyEncoder: KeyEncoder[IRI] = IRI.makeKeyEncoder(prefixes.prefixesMap)
       endpoint.post
         .in("query")
         .in(query[Option[Int]]("limit"))
@@ -80,7 +81,7 @@ object Server extends App {
     }
 
   val openAPIInfo: Info = Info(
-    "SPARQL-KP API",
+    "Ontology-KP API",
     "0.1",
     Some("TRAPI interface to integrated ontology knowledgebase"),
     Some("https://opensource.org/licenses/MIT"),
@@ -98,7 +99,7 @@ object Server extends App {
         routes = queryRoute //<+> predicatesRoute
         // will be available at /docs
         openAPI = List(queryEndpoint)
-          .toOpenAPI("SPARQL-KP API", "0.1")
+          .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator")))
           .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
