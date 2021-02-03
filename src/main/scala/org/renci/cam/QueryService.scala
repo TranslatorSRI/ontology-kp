@@ -19,13 +19,13 @@ object QueryService {
   type NodeMap = Map[String, (TRAPIQueryNode, String, QueryText)]
   type EdgeMap = Map[String, (TRAPIQueryEdge, String, QueryText)]
 
-  def run(queryGraph: TRAPIQueryGraph, limit: Option[Int]): RIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], TRAPIMessage] =
+  def run(queryGraph: TRAPIQueryGraph, limit: Option[Int]): RIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], TRAPIResponse] =
     for {
       knownPredicates <- getKnownPredicates
       biolink <- ZIO.service[Biolink]
       (nodeMap, edgeMap, query) = makeSPARQL(queryGraph, biolink, limit, knownPredicates)
       result <- SPARQLQueryExecutor.runSelectQuery(query)
-    } yield makeResultMessage(result, queryGraph, nodeMap, edgeMap)
+    } yield TRAPIResponse(makeResultMessage(result, queryGraph, nodeMap, edgeMap))
 
   def makeResultMessage(results: SelectResult, queryGraph: TRAPIQueryGraph, nodeMap: NodeMap, edgeMap: EdgeMap): TRAPIMessage = {
     val (trapiResults, nodes, edges) = results.solutions.map { solution =>
