@@ -125,4 +125,6 @@ package object domain {
 
   final case class TRAPIQueryRequestBody(message: TRAPIMessage)
 
+  final case class TRAPIResponse(message: TRAPIMessage)
+
 }

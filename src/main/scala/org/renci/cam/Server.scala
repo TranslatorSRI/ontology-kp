@@ -53,7 +53,7 @@ object Server extends App {
 
   }
 
-  val queryEndpointZ: URIO[Has[PrefixesMap], ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIMessage]] = {
+  val queryEndpointZ: URIO[Has[PrefixesMap], ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIResponse]] = {
     for {
       prefixes <- biolinkPrefixes
     } yield {
@@ -66,12 +66,12 @@ object Server extends App {
         .in(query[Option[Int]]("limit"))
         .in(jsonBody[TRAPIQueryRequestBody])
         .errorOut(stringBody)
-        .out(jsonBody[TRAPIMessage])
+        .out(jsonBody[TRAPIResponse])
         .summary("Submit a TRAPI question graph and retrieve matching solutions")
     }
   }
 
-  def queryRouteR(queryEndpoint: ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIMessage])
+  def queryRouteR(queryEndpoint: ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIResponse])
     : URIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], HttpRoutes[Task]] =
     queryEndpoint.toRoutesR { case (limit, body) =>
       val program = for {
