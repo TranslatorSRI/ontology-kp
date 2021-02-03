@@ -4,9 +4,12 @@ import contextual.Case
 import io.circe.Decoder.Result
 import io.circe._
 import org.apache.commons.text.CaseUtils
-import org.apache.jena.query.ParameterizedSparqlString
+import org.apache.jena.query.{ParameterizedSparqlString, QuerySolution}
+import org.phenoscape.sparql.FromQuerySolution
 import org.phenoscape.sparql.SPARQLInterpolation.SPARQLInterpolator.SPARQLContext
 import org.phenoscape.sparql.SPARQLInterpolation._
+
+import scala.util.Try
 
 package object domain {
 
@@ -36,16 +39,15 @@ package object domain {
       BiolinkTerm(iri.value.replace(namespace, ""), iri)
     }
 
-//    def makeDecoder(biolinkModel: Map[String, IRI]): Decoder[BiolinkTerm] = new Decoder[BiolinkTerm] {
-//
-//      override def apply(c: HCursor): Result[BiolinkTerm] = for {
-//        value <- c.value.as[String]
-//        iri <- biolinkModel.get(value).toRight(DecodingFailure(s"No Biolink IRI found for $value", Nil))
-//      } yield BiolinkTerm(value, iri)
-//
-//    }
+    implicit val keyDecoder: KeyDecoder[BiolinkTerm] = IRI.makeKeyDecoder(Map("biolink" -> namespace)).map { iri =>
+      BiolinkTerm(iri.value.replace(namespace, ""), iri)
+    }
 
     implicit val encoder: Encoder[BiolinkTerm] = Encoder.encodeString.contramap(blTerm => s"biolink:${blTerm.shorthand}")
+
+    implicit val keyEncoder: KeyEncoder[BiolinkTerm] = KeyEncoder.encodeKeyString.contramap { term =>
+      s"biolink:${term.shorthand}"
+    }
 
   }
 
@@ -87,6 +89,13 @@ package object domain {
       pss.appendIri(iri.value)
       pss.toString
     })
+
+    implicit object IRIFromQuerySolution extends FromQuerySolution[IRI] {
+
+      def fromQuerySolution(qs: QuerySolution, variablePath: String = ""): Try[IRI] =
+        getResource(qs, variablePath).map(r => IRI(r.getURI))
+
+    }
 
   }
 
