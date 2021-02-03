@@ -40,10 +40,11 @@ object Biolink {
     */
   def mappingsClosure(biolink: Biolink): Map[String, Set[IRI]] = {
     val allTerms = biolink.classes.map { case (key, value) =>
-      (CaseUtils.toCamelCase(key, true, ' '), value)
-    } ++ biolink.slots.map { case (key, value) =>
-      (key.replace(" ", "_"), value)
-    }
+      classNameToLocalPart(key) -> value
+    } ++
+      biolink.slots.map { case (key, value) =>
+        slotNameToLocalPart(key) -> value
+      }
     def ancestors(term: String): Set[String] = allTerms.get(term).toSet[BiolinkTerm].flatMap { t =>
       val parents = (t.is_a.toList ::: t.mixins.toList.flatten).toSet
       if (parents.isEmpty) parents
@@ -64,5 +65,9 @@ object Biolink {
           ::: t.narrow_mappings.toList.flatten)
     } yield term -> mappings).toMap
   }
+
+  def classNameToLocalPart(name: String): String = CaseUtils.toCamelCase(name, true, ' ')
+
+  def slotNameToLocalPart(name: String): String = name.replace(" ", "_")
 
 }

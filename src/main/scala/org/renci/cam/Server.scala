@@ -40,14 +40,18 @@ object Server extends App {
 
   import LocalTapirJsonCirce._
 
-//  val predicatesEndpoint: ZEndpoint[Unit, String, String] = endpoint.get.in("predicates").errorOut(stringBody).out(jsonBody[String])
-//
-//  val predicatesRouteR: URIO[ZConfig[AppConfig], HttpRoutes[Task]] = predicatesEndpoint.toRoutesR { case () =>
-//    val program = for {
-//      response <- Task.effect("")
-//    } yield response
-//    program.mapError(error => error.getMessage)
-//  }
+  val predicatesEndpoint: ZEndpoint[Unit, String, Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]] =
+    endpoint.get.in("predicates").errorOut(stringBody).out(jsonBody[Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]])
+
+  val predicatesRouteR: ZIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], Throwable, HttpRoutes[Task]] = {
+    for {
+      cachedResponse <- PredicatesService.run
+      ret <- predicatesEndpoint.toRoutesR { case () =>
+        ZIO.effect(cachedResponse).mapError(error => error.getMessage)
+      }
+    } yield ret
+
+  }
 
   val queryEndpointZ: URIO[Has[PrefixesMap], ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIMessage]] = {
     for {
@@ -94,11 +98,11 @@ object Server extends App {
       for {
         appConfig <- config[AppConfig]
         queryEndpoint <- queryEndpointZ
-        //predicatesRoute <- predicatesRouteR
+        predicatesRoute <- predicatesRouteR
         queryRoute <- queryRouteR(queryEndpoint)
-        routes = queryRoute //<+> predicatesRoute
+        routes = queryRoute <+> predicatesRoute
         // will be available at /docs
-        openAPI = List(queryEndpoint)
+        openAPI = List(queryEndpoint, predicatesEndpoint)
           .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator")))
@@ -124,8 +128,8 @@ object Server extends App {
           BlazeServerBuilder[Task](runtime.platform.executor.asEC)
             .bindHttp(appConfig.port, appConfig.host)
             .withHttpApp(CORS(httpAppWithLogging))
-            .withResponseHeaderTimeout(120.seconds)
-            .withIdleTimeout(180.seconds)
+            .withResponseHeaderTimeout(800.seconds)
+            .withIdleTimeout(900.seconds)
             .serve
             .compile
             .drain
