@@ -46,20 +46,20 @@ object QueryService {
   private def responseForQueryNode(nodeLocalID: String,
                                    queryNode: TRAPIQueryNode,
                                    solution: QuerySolution,
-                                   nodeMap: NodeMap): ((String, TRAPINodeBinding), (IRI, TRAPINode)) = {
+                                   nodeMap: NodeMap): ((String, List[TRAPINodeBinding]), (IRI, TRAPINode)) = {
     val (_, queryVar, _) = nodeMap(nodeLocalID)
     val nodeIRI = IRI(solution.getResource(queryVar).getURI)
     val nameOpt = Option(solution.getLiteral(s"${queryVar}_label")).map(_.getLexicalForm)
     val trapiNode = TRAPINode(nameOpt, queryNode.category.to(List))
     val trapiNodeBinding = TRAPINodeBinding(nodeIRI)
-    (nodeLocalID -> trapiNodeBinding, nodeIRI -> trapiNode)
+    (nodeLocalID -> List(trapiNodeBinding), nodeIRI -> trapiNode)
   }
 
   private def responseForQueryEdge(edgeLocalID: String,
                                    queryEdge: TRAPIQueryEdge,
                                    solution: QuerySolution,
                                    nodeMap: NodeMap,
-                                   edgeMap: EdgeMap): ((String, TRAPIEdgeBinding), (String, TRAPIEdge)) = {
+                                   edgeMap: EdgeMap): ((String, List[TRAPIEdgeBinding]), (String, TRAPIEdge)) = {
     val (_, sourceVar, _) = nodeMap(queryEdge.subject)
     val (_, targetVar, _) = nodeMap(queryEdge.`object`)
     val (_, predicateVar, _) = edgeMap(edgeLocalID)
@@ -70,7 +70,7 @@ object QueryService {
       DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
     val trapiEdge = TRAPIEdge(queryEdge.predicate, sourceIRI, targetIRI)
     val trapiEdgeBinding = TRAPIEdgeBinding(edgeKGID)
-    ((edgeLocalID, trapiEdgeBinding), (edgeKGID, trapiEdge))
+    ((edgeLocalID, List(trapiEdgeBinding)), (edgeKGID, trapiEdge))
   }
 
   def makeSPARQL(queryGraph: TRAPIQueryGraph,
