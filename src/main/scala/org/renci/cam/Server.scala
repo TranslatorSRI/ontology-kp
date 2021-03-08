@@ -114,7 +114,8 @@ object Server extends App {
                 "info": {
                   "x-translator": {
                     "component": "KP",
-                    "team": "SRI"
+                    "team":
+                      - "Standards Reference Implementation Team"
                   }
                 }
              }
