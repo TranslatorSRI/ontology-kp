@@ -56,7 +56,7 @@ libraryDependencies ++= {
     "dev.zio"                     %% "zio-test"                 % zioVersion % Test,
     "dev.zio"                     %% "zio-test-sbt"             % zioVersion % Test,
     "ch.qos.logback"               % "logback-classic"          % logbackVersion,
-    "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.2"
+    "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.3"
   )
 }
 
