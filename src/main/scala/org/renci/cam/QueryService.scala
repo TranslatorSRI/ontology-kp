@@ -93,6 +93,7 @@ object QueryService {
                 val values = mappings.map(term => sparql"$term ").reduceOption(_ + _).getOrElse(sparql"")
                 sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
+                FILTER(isIRI($nodeVar))
                 FILTER EXISTS {
                   $nodeVar $RDFSSubClassOf $nodeSuperVar .
                   VALUES $nodeSuperVar { $values }
@@ -106,6 +107,7 @@ object QueryService {
             .map { c =>
               sparql"""
               $nodeVar $RDFSLabel $nodeLabelVar . 
+              FILTER(isIRI($nodeVar))
               VALUES $nodeVar { $c }
             """
             }
@@ -126,6 +128,10 @@ object QueryService {
           .map(prop => sparql"$prop ")
           .reduceOption(_ + _)
           .getOrElse(sparql"")
+        val predicateValues =
+          // allow any edge to match related_to
+          if (edgeType == "related_to") sparql""
+          else sparql"VALUES $predVar { $edgeValues }"
         val sparql = (for {
           subj <- nodesToVariables.get(edge.subject).map(_._2)
           subjVar = QueryText(s"?$subj")
@@ -133,7 +139,7 @@ object QueryService {
           objVar = QueryText(s"?$obj")
         } yield sparql"""
                 $subjVar $predVar $objVar .
-                VALUES $predVar { $edgeValues }
+                $predicateValues
               """).getOrElse(sparql"")
         edgeLocalID -> (edge, pred, sparql)
       }
