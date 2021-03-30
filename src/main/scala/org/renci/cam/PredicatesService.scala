@@ -1,5 +1,6 @@
 package org.renci.cam
 
+import org.apache.jena.vocabulary.{OWL2, RDF, RDFS, SKOS}
 import org.phenoscape.sparql.SPARQLInterpolation._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.QueryService.RDFSSubClassOf
@@ -12,6 +13,13 @@ import zio.config.ZConfig
 
 object PredicatesService {
 
+  private val rdfType = IRI(RDF.`type`.getURI)
+  private val rdfsSubClassOf = IRI(RDFS.subClassOf.getURI)
+  private val skosMappingRelation = IRI(SKOS.mappingRelation.getURI)
+  private val skosExactMatch = IRI(SKOS.exactMatch.getURI)
+  private val skosNarrowMatch = IRI(SKOS.narrowMatch.getURI)
+  private val ClassDefinition = IRI("https://w3id.org/biolink/biolinkml/meta/types/ClassDefinition")
+
   final case class Triple(subject: IRI, predicate: IRI, `object`: IRI)
 
   def run: ZIO[ZConfig[AppConfig] with HttpClient with Has[Biolink],
@@ -19,20 +27,12 @@ object PredicatesService {
                Map[domain.BiolinkTerm, Map[domain.BiolinkTerm, List[domain.BiolinkTerm]]]] =
     for {
       biolink <- ZIO.service[Biolink]
-      slots = mappedSlots(biolink)
-      classes = mappedClasses(biolink)
-      predicates = slots.values.flatten.to(Set)
-      termsToClasses = invert(classes)
-      termsToSlots = invert(slots)
-      predicateResults <- ZIO.foreachParN(10)(predicates.to(List))(queryPredicate)
+      slots = biolink.slots.keys.map(makeBiolinkSlot).map(_.iri)
+      predicateResults <- ZIO.foreach(slots.to(List))(queryPredicate)
       triples = predicateResults.flatten.to(Set)
     } yield {
-      val allBiolinkTriples = triples.flatMap { case Triple(subject, predicate, obj) =>
-        for {
-          subjectClass <- termsToClasses.getOrElse(subject, Nil)
-          objectClass <- termsToClasses.getOrElse(obj, Nil)
-          predicateSlot <- termsToSlots.getOrElse(predicate, Nil)
-        } yield (makeBiolinkClass(subjectClass), makeBiolinkSlot(predicateSlot), makeBiolinkClass(objectClass))
+      val allBiolinkTriples = triples.map { case Triple(subject, predicate, obj) =>
+        (makeBiolinkTerm(subject), makeBiolinkTerm(predicate), makeBiolinkTerm(obj))
       }
       allBiolinkTriples
         .groupMap(_._1)(t => (t._2, t._3))
@@ -48,31 +48,41 @@ object PredicatesService {
     domain.BiolinkTerm(localPart, IRI(s"${domain.BiolinkTerm.namespace}$localPart"))
   }
 
+  private def makeBiolinkTerm(iri: IRI): domain.BiolinkTerm = {
+    val localPart = iri.value.replace(domain.BiolinkTerm.namespace, "")
+    domain.BiolinkTerm(localPart, iri)
+  }
+
   private def makeBiolinkSlot(name: String): domain.BiolinkTerm = {
     val localPart = Biolink.slotNameToLocalPart(name)
     domain.BiolinkTerm(localPart, IRI(s"${domain.BiolinkTerm.namespace}$localPart"))
   }
 
-  def queryPredicate(predicate: IRI): ZIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], Throwable, List[Triple]] =
-    for {
-      biolink <- ZIO.service[Biolink]
-      classes = mappedClasses(biolink).values.flatten.to(Set)
-      classesFilterList = classes.to(List).map(iri => sparql"$iri").intersperse(sparql",").fold(sparql"")(_ + _)
-      _ = println(s"Started: $predicate")
-      query =
-        sparql"""
-              SELECT DISTINCT ?subject ($predicate AS ?predicate) ?object
+  def queryPredicate(slot: IRI): ZIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], Throwable, List[Triple]] = {
+    val query = sparql"""
+              SELECT DISTINCT (?subjectClass AS ?subject) ($slot AS ?predicate) (?objectClass AS ?object)
               WHERE {
-                ?sub $RDFSSubClassOf ?subject .                                                            
-                ?sub $predicate ?object .
-                FILTER (?subject IN ($classesFilterList))
-                FILTER (?object IN ($classesFilterList))
+                ?subjectClass $rdfType $ClassDefinition .
+                ?subjectClass ($skosMappingRelation|$skosExactMatch|$skosNarrowMatch) ?subjectTerm .
+                ?objectClass $rdfType $ClassDefinition .  
+                ?objectClass ($skosMappingRelation|$skosExactMatch|$skosNarrowMatch) ?objectTerm .
+                $slot ($skosMappingRelation|$skosExactMatch|$skosNarrowMatch) ?pred .
+                ?subjectNode $rdfsSubClassOf ?subjectTerm .
+                ?subjectNode ?pred ?objectTerm .
+                FILTER(isIRI(?subjectClass))
+                FILTER(isIRI(?subjectNode))
+                FILTER(isIRI(?subjectTerm))
+                FILTER(isIRI(?objectClass))
+                FILTER(isIRI(?objectTerm))
               }
               """
+    for {
       parsedQuery <- ZIO.effect(query.toQuery)
+      _ = println(s"Started: $slot")
       triples <- SPARQLQueryExecutor.runSelectQueryAs[Triple](parsedQuery)
-      _ = println(s"Done: $predicate")
+      _ = println(s"Done: $slot")
     } yield triples
+  }
 
   def mappedClasses(biolink: Biolink): Map[String, List[IRI]] =
     biolink.classes
