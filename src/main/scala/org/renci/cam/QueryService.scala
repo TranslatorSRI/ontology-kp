@@ -95,6 +95,7 @@ object QueryService {
                 $nodeVar $RDFSLabel $nodeLabelVar . 
                 FILTER(isIRI($nodeVar))
                 $nodeVar $RDFSSubClassOf $nodeSuperVar .
+                FILTER(isIRI($nodeSuperVar)) 
                 GRAPH $BiolinkModelGraph {
                 $nodeSuperVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ${blt.iri} .
                 }
