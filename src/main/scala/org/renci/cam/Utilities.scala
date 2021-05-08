@@ -10,6 +10,7 @@ import org.renci.cam.HttpClient.HttpClient
 import zio._
 import zio.interop.catz._
 
+import scala.annotation.tailrec
 import scala.io.Source
 
 object Utilities {
@@ -60,7 +61,7 @@ object Utilities {
       source <- Managed.fromAutoCloseable(Task.effect(Source.fromInputStream(fileStream)))
     } yield source
     for {
-      prefixesStr <- sourceManaged.use(source => ZIO.effect(source.getLines.mkString))
+      prefixesStr <- sourceManaged.use(source => ZIO.effect(source.getLines().mkString))
       prefixesJson <- ZIO.fromEither(parse(prefixesStr))
       prefixes <- ZIO.fromEither(prefixesJson.as[Map[String, String]])
     } yield prefixes
@@ -78,5 +79,16 @@ object Utilities {
   val biolinkPrefixes: URIO[Has[PrefixesMap], PrefixesMap] = ZIO.service
 
   final case class PrefixesMap(prefixesMap: Map[String, String])
+
+  implicit final class ListOps[A](val self: List[A]) extends AnyVal {
+
+    def intersperse(item: A): List[A] =
+      self match {
+        case Nil => Nil
+        case _ :: Nil => self
+        case first :: rest => first :: item :: rest.intersperse(item)
+      }
+
+  }
 
 }

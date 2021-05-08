@@ -2,6 +2,7 @@ package org.renci.cam
 
 import io.circe.generic.auto._
 import io.circe.{yaml, Decoder}
+import org.apache.commons.text.CaseUtils
 import org.http4s.implicits._
 import org.http4s.{Method, Request}
 import org.renci.cam.HttpClient.HttpClient
@@ -10,7 +11,12 @@ import org.renci.cam.domain.IRI
 import zio._
 import zio.interop.catz._
 
-final case class BiolinkTerm(is_a: Option[String], mixins: Option[List[String]], subclass_of: Option[IRI], mappings: Option[List[IRI]])
+final case class BiolinkTerm(is_a: Option[String],
+                             mixins: Option[List[String]],
+                             subclass_of: Option[IRI],
+                             mappings: Option[List[IRI]],
+                             exact_mappings: Option[List[IRI]],
+                             narrow_mappings: Option[List[IRI]])
 
 final case class Biolink(classes: Map[String, BiolinkTerm], slots: Map[String, BiolinkTerm])
 
@@ -33,7 +39,14 @@ object Biolink {
   /** Map from a Biolink term name to all external IRIs for it and its descendants
     */
   def mappingsClosure(biolink: Biolink): Map[String, Set[IRI]] = {
-    val allTerms = biolink.classes ++ biolink.slots
+    val allTerms = biolink.classes.map { case (key, value) =>
+      classNameToLocalPart(key) -> value.copy(is_a = value.is_a.map(classNameToLocalPart),
+                                              mixins = value.mixins.map(_.map(classNameToLocalPart)))
+    } ++
+      biolink.slots.map { case (key, value) =>
+        slotNameToLocalPart(key) -> value.copy(is_a = value.is_a.map(slotNameToLocalPart),
+                                               mixins = value.mixins.map(_.map(slotNameToLocalPart)))
+      }
     def ancestors(term: String): Set[String] = allTerms.get(term).toSet[BiolinkTerm].flatMap { t =>
       val parents = (t.is_a.toList ::: t.mixins.toList.flatten).toSet
       if (parents.isEmpty) parents
@@ -43,12 +56,20 @@ object Biolink {
       name <- allTerms.keys
       ancestor <- ancestors(name) + name
     } yield ancestor -> name
-    val reflexiveTermsToDescendants = reflexiveTermsToDescendantsPairs.groupBy(_._1).mapValues(_.map(_._2).toSet).toList.toMap
+    val reflexiveTermsToDescendants = reflexiveTermsToDescendantsPairs.groupBy(_._1).view.mapValues(_.map(_._2).toSet).to(List).to(Map)
     (for {
       (term, descendants) <- reflexiveTermsToDescendants
       descendantBiolinkTerms = descendants.flatMap(d => allTerms.get(d))
-      mappings = descendantBiolinkTerms.flatMap(t => t.subclass_of.toList ::: t.mappings.toList.flatten)
+      mappings = descendantBiolinkTerms.flatMap(t =>
+        t.subclass_of.toList
+          ::: t.mappings.toList.flatten
+          ::: t.exact_mappings.toList.flatten
+          ::: t.narrow_mappings.toList.flatten)
     } yield term -> mappings).toMap
   }
+
+  def classNameToLocalPart(name: String): String = CaseUtils.toCamelCase(name, true, ' ')
+
+  def slotNameToLocalPart(name: String): String = name.replace(" ", "_")
 
 }

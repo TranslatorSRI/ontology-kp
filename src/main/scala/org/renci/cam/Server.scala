@@ -2,10 +2,11 @@ package org.renci.cam
 
 import java.util.Properties
 
-import cats.effect.{Blocker, ContextShift, Sync}
+import cats.effect.Blocker
 import cats.implicits._
 import io.circe.generic.auto._
-import io.circe.{Decoder, Encoder, Printer}
+import io.circe.yaml.syntax._
+import io.circe._
 import org.http4s._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.Location
@@ -13,16 +14,14 @@ import org.http4s.implicits._
 import org.http4s.server.Router
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.middleware.{Logger, _}
-import io.circe.yaml.syntax._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.Utilities._
 import org.renci.cam.domain._
 import sttp.tapir.docs.openapi._
 import sttp.tapir.json.circe._
-import sttp.tapir.openapi.{Contact, Info, License}
 import sttp.tapir.openapi.circe.yaml._
+import sttp.tapir.openapi.{Contact, Info, License}
 import sttp.tapir.server.http4s.ztapir._
-import sttp.tapir.swagger.http4s.SwaggerHttp4s
 import sttp.tapir.ztapir._
 import zio.config.typesafe.TypesafeConfig
 import zio.config.{ZConfig, _}
@@ -41,32 +40,38 @@ object Server extends App {
 
   import LocalTapirJsonCirce._
 
-//  val predicatesEndpoint: ZEndpoint[Unit, String, String] = endpoint.get.in("predicates").errorOut(stringBody).out(jsonBody[String])
-//
-//  val predicatesRouteR: URIO[ZConfig[AppConfig], HttpRoutes[Task]] = predicatesEndpoint.toRoutesR { case () =>
-//    val program = for {
-//      response <- Task.effect("")
-//    } yield response
-//    program.mapError(error => error.getMessage)
-//  }
+  val predicatesEndpoint: ZEndpoint[Unit, String, Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]] =
+    endpoint.get.in("predicates").errorOut(stringBody).out(jsonBody[Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]])
 
-  val queryEndpointZ: URIO[Has[PrefixesMap], ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIMessage]] = {
+  val predicatesRouteR: ZIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], Throwable, HttpRoutes[Task]] = {
+    for {
+      cachedResponse <- PredicatesService.run
+      ret <- predicatesEndpoint.toRoutesR { case () =>
+        ZIO.effect(cachedResponse).mapError(error => error.getMessage)
+      }
+    } yield ret
+
+  }
+
+  val queryEndpointZ: URIO[Has[PrefixesMap], ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIResponse]] = {
     for {
       prefixes <- biolinkPrefixes
     } yield {
       implicit val iriDecoder: Decoder[IRI] = IRI.makeDecoder(prefixes.prefixesMap)
       implicit val iriEncoder: Encoder[IRI] = IRI.makeEncoder(prefixes.prefixesMap)
+      implicit val iriKeyDecoder: KeyDecoder[IRI] = IRI.makeKeyDecoder(prefixes.prefixesMap)
+      implicit val iriKeyEncoder: KeyEncoder[IRI] = IRI.makeKeyEncoder(prefixes.prefixesMap)
       endpoint.post
         .in("query")
         .in(query[Option[Int]]("limit"))
         .in(jsonBody[TRAPIQueryRequestBody])
         .errorOut(stringBody)
-        .out(jsonBody[TRAPIMessage])
+        .out(jsonBody[TRAPIResponse])
         .summary("Submit a TRAPI question graph and retrieve matching solutions")
     }
   }
 
-  def queryRouteR(queryEndpoint: ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIMessage])
+  def queryRouteR(queryEndpoint: ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIResponse])
     : URIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], HttpRoutes[Task]] =
     queryEndpoint.toRoutesR { case (limit, body) =>
       val program = for {
@@ -80,7 +85,7 @@ object Server extends App {
     }
 
   val openAPIInfo: Info = Info(
-    "SPARQL-KP API",
+    "Ontology-KP API",
     "0.1",
     Some("TRAPI interface to integrated ontology knowledgebase"),
     Some("https://opensource.org/licenses/MIT"),
@@ -93,12 +98,12 @@ object Server extends App {
       for {
         appConfig <- config[AppConfig]
         queryEndpoint <- queryEndpointZ
-        //predicatesRoute <- predicatesRouteR
+        predicatesRoute <- predicatesRouteR
         queryRoute <- queryRouteR(queryEndpoint)
-        routes = queryRoute //<+> predicatesRoute
+        routes = queryRoute <+> predicatesRoute
         // will be available at /docs
-        openAPI = List(queryEndpoint)
-          .toOpenAPI("SPARQL-KP API", "0.1")
+        openAPI = List(queryEndpoint, predicatesEndpoint)
+          .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator")))
           .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
@@ -109,7 +114,7 @@ object Server extends App {
                 "info": {
                   "x-translator": {
                     "component": "KP",
-                    "team": "SRI"
+                    "team": [ "Standards Reference Implementation Team" ]
                   }
                 }
              }
@@ -123,8 +128,8 @@ object Server extends App {
           BlazeServerBuilder[Task](runtime.platform.executor.asEC)
             .bindHttp(appConfig.port, appConfig.host)
             .withHttpApp(CORS(httpAppWithLogging))
-            .withResponseHeaderTimeout(120.seconds)
-            .withIdleTimeout(180.seconds)
+            .withResponseHeaderTimeout(800.seconds)
+            .withIdleTimeout(900.seconds)
             .serve
             .compile
             .drain
