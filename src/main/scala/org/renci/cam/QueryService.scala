@@ -15,17 +15,23 @@ object QueryService {
 
   val RDFSSubClassOf: IRI = IRI("http://www.w3.org/2000/01/rdf-schema#subClassOf")
   val RDFSLabel: IRI = IRI("http://www.w3.org/2000/01/rdf-schema#label")
+  val BiolinkModelGraph: IRI = IRI("https://biolink.github.io/biolink-model/")
+  val BiolinkIsA: IRI = IRI("https://w3id.org/biolink/biolinkml/meta/is_a")
+  val BiolinkMixins: IRI = IRI("https://w3id.org/biolink/biolinkml/meta/mixins")
+  val BiolinkRelatedTo: BiolinkTerm = BiolinkTerm("related_to", IRI("https://w3id.org/biolink/vocab/related_to"))
+  val SkosExactMatch: IRI = IRI("http://www.w3.org/2004/02/skos/core#exactMatch")
+  val SkosNarrowMatch: IRI = IRI("http://www.w3.org/2004/02/skos/core#narrowMatch")
+  val SkosMappingRelation: IRI = IRI("http://www.w3.org/2004/02/skos/core#mappingRelation")
 
   type NodeMap = Map[String, (TRAPIQueryNode, String, QueryText)]
   type EdgeMap = Map[String, (TRAPIQueryEdge, String, QueryText)]
 
-  def run(queryGraph: TRAPIQueryGraph, limit: Option[Int]): RIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], TRAPIResponse] =
+  def run(queryGraph: TRAPIQueryGraph, limit: Option[Int]): RIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], TRAPIResponse] = {
+    val (nodeMap, edgeMap, query) = makeSPARQL(queryGraph, limit)
     for {
-      knownPredicates <- getKnownPredicates
-      biolink <- ZIO.service[Biolink]
-      (nodeMap, edgeMap, query) = makeSPARQL(queryGraph, biolink, limit, knownPredicates)
       result <- SPARQLQueryExecutor.runSelectQuery(query)
     } yield TRAPIResponse(makeResultMessage(result, queryGraph, nodeMap, edgeMap))
+  }
 
   def makeResultMessage(results: SelectResult, queryGraph: TRAPIQueryGraph, nodeMap: NodeMap, edgeMap: EdgeMap): TRAPIMessage = {
     val (trapiResults, nodes, edges) = results.solutions.map { solution =>
@@ -40,7 +46,7 @@ object QueryService {
       (trapiResult, trapiNodes, trapiEdges)
     }.unzip3
     val kg = TRAPIKnowledgeGraph(nodes.flatten.toMap, edges.flatten.toMap)
-    TRAPIMessage(Some(queryGraph), Some(kg), Some(trapiResults))
+    TRAPIMessage(Some(queryGraph), Some(kg), Some(trapiResults.distinct))
   }
 
   private def responseForQueryNode(nodeLocalID: String,
@@ -73,11 +79,7 @@ object QueryService {
     ((edgeLocalID, List(trapiEdgeBinding)), (edgeKGID, trapiEdge))
   }
 
-  def makeSPARQL(queryGraph: TRAPIQueryGraph,
-                 biolink: Biolink,
-                 limit: Option[Int],
-                 knownPredicates: Set[IRI]): (NodeMap, EdgeMap, Query) = {
-    val mappingsClosure = Biolink.mappingsClosure(biolink)
+  def makeSPARQL(queryGraph: TRAPIQueryGraph, limit: Option[Int]): (NodeMap, EdgeMap, Query) = {
     val nodesToVariables = queryGraph.nodes.zipWithIndex
       .map { case ((nodeLocalID, node), index) =>
         val nodeVarName = s"n$index"
@@ -89,13 +91,12 @@ object QueryService {
               if (blt.shorthand == "NamedThing") sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
               else {
                 val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
-                val mappings = mappingsClosure.get(blt.shorthand).to(Set).flatten
-                val values = mappings.map(term => sparql"$term ").reduceOption(_ + _).getOrElse(sparql"")
                 sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
-                FILTER EXISTS {
-                  $nodeVar $RDFSSubClassOf $nodeSuperVar .
-                  VALUES $nodeSuperVar { $values }
+                FILTER(isIRI($nodeVar))
+                $nodeVar $RDFSSubClassOf $nodeSuperVar .
+                GRAPH $BiolinkModelGraph {
+                $nodeSuperVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ${blt.iri} .
                 }
               """
               }
@@ -106,6 +107,7 @@ object QueryService {
             .map { c =>
               sparql"""
               $nodeVar $RDFSLabel $nodeLabelVar . 
+              FILTER(isIRI($nodeVar))
               VALUES $nodeVar { $c }
             """
             }
@@ -118,14 +120,16 @@ object QueryService {
       .map { case ((edgeLocalID, edge), index) =>
         val pred = s"e$index"
         val predVar = QueryText(s"?$pred")
-        val edgeType = edge.predicate.map(_.shorthand).getOrElse("related_to")
-        //FIXME replacement is hacky
-        val edgeValues = mappingsClosure
-          .getOrElse(edgeType, Set.empty)
-          .filter(knownPredicates)
-          .map(prop => sparql"$prop ")
-          .reduceOption(_ + _)
-          .getOrElse(sparql"")
+        val edgeType = edge.predicate.getOrElse(BiolinkRelatedTo)
+        val predicateValues =
+          // allow any edge to match related_to
+          if (edgeType == BiolinkRelatedTo) sparql""
+          else
+            sparql"""
+                   GRAPH $BiolinkModelGraph {
+                   $predVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ${edgeType.iri} .
+                   }
+                  """
         val sparql = (for {
           subj <- nodesToVariables.get(edge.subject).map(_._2)
           subjVar = QueryText(s"?$subj")
@@ -133,7 +137,7 @@ object QueryService {
           objVar = QueryText(s"?$obj")
         } yield sparql"""
                 $subjVar $predVar $objVar .
-                VALUES $predVar { $edgeValues }
+                $predicateValues
               """).getOrElse(sparql"")
         edgeLocalID -> (edge, pred, sparql)
       }
@@ -154,20 +158,6 @@ object QueryService {
       $limitSPARQL
           """
     (nodesToVariables, edgesToVariables, query.toQuery)
-  }
-
-  // This is an optimization for the main query, which runs much faster with fewer possible predicates
-  def getKnownPredicates: ZIO[ZConfig[AppConfig] with HttpClient, Throwable, Set[IRI]] = {
-    val query =
-      sparql"""
-         SELECT DISTINCT ?p
-         WHERE { 
-           ?s ?p ?o
-         }
-      """.toQuery
-    for {
-      result <- SPARQLQueryExecutor.runSelectQuery(query)
-    } yield result.solutions.map(qs => IRI(qs.getResource("p").getURI)).to(Set)
   }
 
 }
