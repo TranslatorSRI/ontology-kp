@@ -10,7 +10,7 @@ version := "0.1"
 
 licenses := Seq("MIT license" -> url("https://opensource.org/licenses/MIT"))
 
-scalaVersion := "2.13.4"
+scalaVersion := "2.13.5"
 
 scalacOptions := Seq("-unchecked", "-deprecation", "-encoding", "utf8")
 
@@ -19,8 +19,8 @@ javaOptions += "-Xmx8G"
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
 val zioVersion = "1.0.7"
-val zioConfigVersion = "1.0.0-RC26"
-val tapirVersion = "0.17.19"
+val zioConfigVersion = "1.0.4"
+val tapirVersion = "0.16.16"
 val http4sVersion = "0.21.22"
 val circeVersion = "0.13.0"
 val logbackVersion = "1.2.3"
@@ -45,8 +45,8 @@ libraryDependencies ++= {
     "org.http4s"                  %% "http4s-dsl"               % http4sVersion,
     "org.http4s"                  %% "http4s-blaze-client"      % http4sVersion,
     "org.http4s"                  %% "http4s-circe"             % http4sVersion,
-    "org.apache.jena"              % "apache-jena-libs"         % "3.16.0",
-    "org.phenoscape"              %% "sparql-utils"             % "1.3",
+    "org.apache.jena"              % "apache-jena-libs"         % "3.17.0",
+    "org.phenoscape"              %% "sparql-utils"             % "1.3.1",
     "org.apache.commons"           % "commons-text"             % "1.9",
     "commons-codec"                % "commons-codec"            % "1.15",
     "io.circe"                    %% "circe-core"               % circeVersion,
@@ -56,7 +56,7 @@ libraryDependencies ++= {
     "dev.zio"                     %% "zio-test"                 % zioVersion % Test,
     "dev.zio"                     %% "zio-test-sbt"             % zioVersion % Test,
     "ch.qos.logback"               % "logback-classic"          % logbackVersion,
-    "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.2"
+    "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.3"
   )
 }
 

@@ -9,7 +9,6 @@ import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.SPARQLQueryExecutor.SelectResult
 import org.renci.cam.domain._
 import zio._
-import zio.config.ZConfig
 
 object QueryService {
 
@@ -26,7 +25,7 @@ object QueryService {
   type NodeMap = Map[String, (TRAPIQueryNode, String, QueryText)]
   type EdgeMap = Map[String, (TRAPIQueryEdge, String, QueryText)]
 
-  def run(queryGraph: TRAPIQueryGraph, limit: Option[Int]): RIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], TRAPIResponse] = {
+  def run(queryGraph: TRAPIQueryGraph, limit: Option[Int]): RIO[Has[AppConfig] with HttpClient with Has[Biolink], TRAPIResponse] = {
     val (nodeMap, edgeMap, query) = makeSPARQL(queryGraph, limit)
     for {
       result <- SPARQLQueryExecutor.runSelectQuery(query)
@@ -95,6 +94,7 @@ object QueryService {
                 $nodeVar $RDFSLabel $nodeLabelVar . 
                 FILTER(isIRI($nodeVar))
                 $nodeVar $RDFSSubClassOf $nodeSuperVar .
+                FILTER(isIRI($nodeSuperVar)) 
                 GRAPH $BiolinkModelGraph {
                 $nodeSuperVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ${blt.iri} .
                 }
