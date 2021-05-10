@@ -24,10 +24,9 @@ import sttp.tapir.openapi.{Contact, Info, License}
 import sttp.tapir.server.http4s.ztapir._
 import sttp.tapir.ztapir._
 import zio.config.typesafe.TypesafeConfig
-import zio.config.{ZConfig, _}
 import zio.interop.catz._
 import zio.interop.catz.implicits._
-import zio.{config => _, _}
+import zio._
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -43,7 +42,7 @@ object Server extends App {
   val predicatesEndpoint: ZEndpoint[Unit, String, Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]] =
     endpoint.get.in("predicates").errorOut(stringBody).out(jsonBody[Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]])
 
-  val predicatesRouteR: ZIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], Throwable, HttpRoutes[Task]] = {
+  val predicatesRouteR: ZIO[Has[AppConfig] with HttpClient with Has[Biolink], Throwable, HttpRoutes[Task]] = {
     for {
       cachedResponse <- PredicatesService.run
       ret <- predicatesEndpoint.toRoutesR { case () =>
@@ -72,7 +71,7 @@ object Server extends App {
   }
 
   def queryRouteR(queryEndpoint: ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIResponse])
-    : URIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], HttpRoutes[Task]] =
+    : URIO[Has[AppConfig] with HttpClient with Has[Biolink], HttpRoutes[Task]] =
     queryEndpoint.toRoutesR { case (limit, body) =>
       val program = for {
         queryGraph <-
@@ -93,10 +92,10 @@ object Server extends App {
     Some(License("MIT License", Some("https://opensource.org/licenses/MIT")))
   )
 
-  val server: RIO[ZConfig[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink], Unit] =
+  val server: RIO[Has[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink], Unit] =
     ZIO.runtime[Any].flatMap { implicit runtime =>
       for {
-        appConfig <- config[AppConfig]
+        appConfig <- config.getConfig[AppConfig]
         queryEndpoint <- queryEndpointZ
         predicatesRoute <- predicatesRouteR
         queryRoute <- queryRouteR(queryEndpoint)
@@ -136,7 +135,7 @@ object Server extends App {
       } yield result
     }
 
-  val configLayer: Layer[Throwable, ZConfig[AppConfig]] = TypesafeConfig.fromDefaultLoader(AppConfig.config)
+  val configLayer: Layer[Throwable, Has[AppConfig]] = TypesafeConfig.fromDefaultLoader(AppConfig.config)
 
   val biolinkLayer: ZLayer[HttpClient with Has[PrefixesMap], Throwable, Has[Biolink]] = Biolink.getBiolinkModel.toLayer
 

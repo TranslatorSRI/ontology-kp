@@ -2,14 +2,16 @@ package org.renci.cam
 
 import org.http4s.Uri
 import zio.config._
-import zio.config.magnolia.DeriveConfigDescriptor.{Descriptor, descriptor, _}
+import zio.config.magnolia.DeriveConfigDescriptor._
+import zio.config.magnolia.Descriptor
 
 final case class AppConfig(host: String, location: String, port: Int, sparqlEndpoint: Uri)
 
 object AppConfig {
 
-  implicit val uriDescriptor: Descriptor[Uri] =
-    Descriptor[String].transformEitherLeft(Uri.fromString)(_.toString)(_.getMessage)
+  implicit val uriDescriptor: Descriptor[Uri] = zio.config.magnolia.getDescriptor(
+    descriptor[String].transformOrFailLeft(s => Uri.fromString(s).left.map(_.getMessage))(_.toString)
+  )
 
   val config: ConfigDescriptor[AppConfig] = descriptor[AppConfig].mapKey(toKebabCase)
 

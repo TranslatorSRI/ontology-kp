@@ -11,9 +11,8 @@ import org.http4s.implicits._
 import org.phenoscape.sparql.FromQuerySolution
 import org.renci.cam.HttpClient.HttpClient
 import zio.ZIO.ZIOAutoCloseableOps
-import zio.config.ZConfig
 import zio.interop.catz._
-import zio.{RIO, Task, ZIO, config => _}
+import zio._
 
 import scala.jdk.CollectionConverters._
 
@@ -35,16 +34,16 @@ object SPARQLQueryExecutor extends LazyLogging {
     .withContentType(`Content-Type`(MediaType.application.`sparql-query`))
     .contramap(_.toString)
 
-  def runSelectQueryAs[T: FromQuerySolution](query: Query): RIO[ZConfig[AppConfig] with HttpClient, List[T]] =
+  def runSelectQueryAs[T: FromQuerySolution](query: Query): RIO[Has[AppConfig] with HttpClient, List[T]] =
     for {
       resultSet <- runSelectQuery(query)
       results = resultSet.solutions.map(FromQuerySolution.mapSolution[T])
       validResults <- ZIO.foreach(results)(ZIO.fromTry(_))
     } yield validResults
 
-  def runSelectQuery(query: Query): RIO[ZConfig[AppConfig] with HttpClient, SelectResult] =
+  def runSelectQuery(query: Query): RIO[Has[AppConfig] with HttpClient, SelectResult] =
     for {
-      appConfig <- zio.config.config[AppConfig]
+      appConfig <- config.getConfig[AppConfig]
       client <- HttpClient.client
       uri = appConfig.sparqlEndpoint
       _ = logger.debug("query: {}", query)

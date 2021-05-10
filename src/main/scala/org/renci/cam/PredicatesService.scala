@@ -1,15 +1,10 @@
 package org.renci.cam
 
-import org.apache.jena.vocabulary.{OWL2, RDF, RDFS, SKOS}
+import org.apache.jena.vocabulary.{RDF, RDFS, SKOS}
 import org.phenoscape.sparql.SPARQLInterpolation._
 import org.renci.cam.HttpClient.HttpClient
-import org.renci.cam.QueryService.RDFSSubClassOf
-import org.renci.cam.Utilities.ListOps
 import org.renci.cam.domain.IRI
 import zio._
-import zio.config.ZConfig
-//import zio.config.ZConfig
-//import scala.concurrent.duration._
 
 object PredicatesService {
 
@@ -22,7 +17,7 @@ object PredicatesService {
 
   final case class Triple(subject: IRI, predicate: IRI, `object`: IRI)
 
-  def run: ZIO[ZConfig[AppConfig] with HttpClient with Has[Biolink],
+  def run: ZIO[Has[AppConfig] with HttpClient with Has[Biolink],
                Throwable,
                Map[domain.BiolinkTerm, Map[domain.BiolinkTerm, List[domain.BiolinkTerm]]]] =
     for {
@@ -58,7 +53,7 @@ object PredicatesService {
     domain.BiolinkTerm(localPart, IRI(s"${domain.BiolinkTerm.namespace}$localPart"))
   }
 
-  def queryPredicate(slot: IRI): ZIO[ZConfig[AppConfig] with HttpClient with Has[Biolink], Throwable, List[Triple]] = {
+  def queryPredicate(slot: IRI): ZIO[Has[AppConfig] with HttpClient with Has[Biolink], Throwable, List[Triple]] = {
     val query = sparql"""
               SELECT DISTINCT (?subjectClass AS ?subject) ($slot AS ?predicate) (?objectClass AS ?object)
               WHERE {
