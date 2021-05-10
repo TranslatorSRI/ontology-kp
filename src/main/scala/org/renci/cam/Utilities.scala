@@ -26,10 +26,17 @@ object Utilities {
       curies =
         contextValue
           .map { case (key, value) =>
-            (key, value.as[String])
+            val idOpt = value.asString.orElse {
+              for {
+                obj <- value.asObject
+                idVal <- obj.toMap.get("@id")
+                id <- idVal.asString
+              } yield id
+            }
+            (key, idOpt)
           }
           .collect {
-            case (key, Right(value)) if !key.startsWith("@") => (key, value)
+            case (key, Some(value)) if !key.startsWith("@") => (key, value)
           }
     } yield PrefixesMap(curies)
 
