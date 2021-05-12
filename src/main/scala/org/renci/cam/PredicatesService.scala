@@ -13,7 +13,7 @@ object PredicatesService {
   private val skosMappingRelation = IRI(SKOS.mappingRelation.getURI)
   private val skosExactMatch = IRI(SKOS.exactMatch.getURI)
   private val skosNarrowMatch = IRI(SKOS.narrowMatch.getURI)
-  private val ClassDefinition = IRI("https://w3id.org/biolink/biolinkml/meta/types/ClassDefinition")
+  private val ClassDefinition = IRI("https://w3id.org/linkml/ClassDefinition")
 
   final case class Triple(subject: IRI, predicate: IRI, `object`: IRI)
 
