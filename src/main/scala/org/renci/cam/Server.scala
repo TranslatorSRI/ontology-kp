@@ -40,17 +40,19 @@ object Server extends App {
   import LocalTapirJsonCirce._
 
   val predicatesEndpoint: ZEndpoint[Unit, String, Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]] =
-    endpoint.get.in("predicates").errorOut(stringBody).out(jsonBody[Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]])
+    endpoint.get
+      .in("predicates")
+      .errorOut(stringBody)
+      .out(jsonBody[Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]])
+      .summary("Get predicates used at this service")
 
-  val predicatesRouteR: ZIO[Has[AppConfig] with HttpClient with Has[Biolink], Throwable, HttpRoutes[Task]] = {
+  val predicatesRouteR: ZIO[Has[AppConfig] with HttpClient with Has[Biolink], Throwable, HttpRoutes[Task]] =
     for {
       cachedResponse <- PredicatesService.run
       ret <- predicatesEndpoint.toRoutesR { case () =>
         ZIO.effect(cachedResponse).mapError(error => error.getMessage)
       }
     } yield ret
-
-  }
 
   val queryEndpointZ: URIO[Has[PrefixesMap], ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIResponse]] = {
     for {
