@@ -127,4 +127,10 @@ package object domain {
 
   final case class TRAPIResponse(message: TRAPIMessage)
 
+  final case class MetaKnowledgeGraph(nodes: Map[BiolinkTerm, MetaNode], edges: List[MetaEdge])
+
+  final case class MetaNode(id_prefixes: List[String])
+
+  final case class MetaEdge(subject: BiolinkTerm, predicate: BiolinkTerm, `object`: BiolinkTerm)
+
 }
