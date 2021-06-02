@@ -3,13 +3,12 @@ package org.renci.cam
 import io.circe.generic.auto._
 import io.circe.{yaml, Decoder}
 import org.apache.commons.text.CaseUtils
-import org.http4s.implicits._
-import org.http4s.{Method, Request}
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.Utilities.{biolinkPrefixes, PrefixesMap}
 import org.renci.cam.domain.IRI
 import zio._
-import zio.interop.catz._
+
+import scala.io.Source
 
 final case class BiolinkTerm(is_a: Option[String],
                              mixins: Option[List[String]],
@@ -18,23 +17,25 @@ final case class BiolinkTerm(is_a: Option[String],
                              exact_mappings: Option[List[IRI]],
                              narrow_mappings: Option[List[IRI]])
 
-final case class Biolink(classes: Map[String, BiolinkTerm], slots: Map[String, BiolinkTerm])
+final case class Biolink(version: String, classes: Map[String, BiolinkTerm], slots: Map[String, BiolinkTerm])
 
 object Biolink {
 
-  def getBiolinkModel: ZIO[HttpClient with Has[PrefixesMap], Throwable, Biolink] =
+  def getBiolinkModel: ZIO[HttpClient with Has[PrefixesMap], Throwable, Biolink] = {
+    val sourceManaged = for {
+      fileStream <- Managed.fromAutoCloseable(Task.effect(getClass.getResourceAsStream("/biolink-model.yaml")))
+      source <- Managed.fromAutoCloseable(Task.effect(Source.fromInputStream(fileStream)))
+    } yield source
     for {
+      modelString <- sourceManaged.use(source => ZIO.effect(source.getLines().mkString("\n")))
+      modelJson <- ZIO.fromEither(yaml.parser.parse(modelString))
       prefixes <- biolinkPrefixes
-      httpClient <- HttpClient.client
-      uri = uri"https://biolink.github.io/biolink-model/biolink-model.yaml"
-      request = Request[Task](Method.GET, uri)
-      text <- httpClient.expect[String](request)
-      biolinkJson <- ZIO.fromEither(yaml.parser.parse(text))
       biolink <- {
         implicit val iriDecoder: Decoder[IRI] = IRI.makeDecoder(prefixes.prefixesMap)
-        ZIO.fromEither(biolinkJson.as[Biolink])
+        ZIO.fromEither(modelJson.as[Biolink])
       }
     } yield biolink
+  }
 
   /** Map from a Biolink term name to all external IRIs for it and its descendants
     */
