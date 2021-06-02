@@ -99,17 +99,37 @@ package object domain {
 
   }
 
-  final case class TRAPIQueryNode(category: Option[BiolinkTerm], id: Option[IRI])
+  final case class TRAPIQueryNode(categories: Option[List[BiolinkTerm]],
+                                  ids: Option[List[IRI]],
+                                  constraints: Option[List[TRAPIQueryConstraint]])
 
   //BiolinkPredicate?
-  final case class TRAPIQueryEdge(predicate: Option[BiolinkTerm], subject: String, `object`: String) //relation
+  final case class TRAPIQueryEdge(predicates: Option[List[BiolinkTerm]],
+                                  relation: Option[IRI],
+                                  subject: String,
+                                  `object`: String,
+                                  constraint: Option[List[TRAPIQueryConstraint]])
 
   final case class TRAPIQueryGraph(nodes: Map[String, TRAPIQueryNode], edges: Map[String, TRAPIQueryEdge])
 
-  //BiolinkClass
-  final case class TRAPINode(name: Option[String], category: List[BiolinkTerm])
+  final case class TRAPIQueryConstraint()
 
-  final case class TRAPIEdge(predicate: Option[BiolinkTerm], subject: IRI, `object`: IRI)
+  final case class TRAPIAttribute(attribute_type_id: IRI,
+                                  original_attribute_name: Option[String],
+                                  value_type_id: IRI,
+                                  attribute_source: Option[String],
+                                  value: String,
+                                  value_url: Option[IRI],
+                                  description: Option[String])
+
+  //BiolinkClass
+  final case class TRAPINode(name: Option[String], categories: Option[List[BiolinkTerm]], attributes: Option[List[TRAPIAttribute]])
+
+  final case class TRAPIEdge(predicate: Option[BiolinkTerm],
+                             relation: Option[IRI],
+                             subject: IRI,
+                             `object`: IRI,
+                             attributes: Option[List[TRAPIAttribute]])
 
   final case class TRAPIKnowledgeGraph(nodes: Map[IRI, TRAPINode], edges: Map[String, TRAPIEdge])
 
@@ -123,7 +143,7 @@ package object domain {
                                 knowledge_graph: Option[TRAPIKnowledgeGraph],
                                 results: Option[List[TRAPIResult]])
 
-  final case class TRAPIQueryRequestBody(message: TRAPIMessage)
+  final case class TRAPIQuery(message: TRAPIMessage, log_level: Option[String])
 
   final case class TRAPIResponse(message: TRAPIMessage)
 

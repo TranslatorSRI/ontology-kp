@@ -55,7 +55,7 @@ object QueryService {
     val (_, queryVar, _) = nodeMap(nodeLocalID)
     val nodeIRI = IRI(solution.getResource(queryVar).getURI)
     val nameOpt = Option(solution.getLiteral(s"${queryVar}_label")).map(_.getLexicalForm)
-    val trapiNode = TRAPINode(nameOpt, queryNode.category.to(List))
+    val trapiNode = TRAPINode(nameOpt, queryNode.categories, None)
     val trapiNodeBinding = TRAPINodeBinding(nodeIRI)
     (nodeLocalID -> List(trapiNodeBinding), nodeIRI -> trapiNode)
   }
@@ -73,7 +73,8 @@ object QueryService {
     val predicateIRI = IRI(solution.getResource(predicateVar).getURI)
     val edgeKGID =
       DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
-    val trapiEdge = TRAPIEdge(queryEdge.predicate, sourceIRI, targetIRI)
+    //FIXME return most specific predicate from database rather than from query
+    val trapiEdge = TRAPIEdge(queryEdge.predicates.flatMap(_.headOption), None, sourceIRI, targetIRI, None) //FIXME return 'relation'
     val trapiEdgeBinding = TRAPIEdgeBinding(edgeKGID)
     ((edgeLocalID, List(trapiEdgeBinding)), (edgeKGID, trapiEdge))
   }
@@ -84,11 +85,19 @@ object QueryService {
         val nodeVarName = s"n$index"
         val nodeVar = QueryText(s"?$nodeVarName")
         val nodeLabelVar = QueryText(s"?${nodeVarName}_label")
-        val nodeSPARQL = if (node.id.isEmpty) {
-          node.category
-            .map { blt =>
-              if (blt.shorthand == "NamedThing") sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
-              else {
+        val nodeSPARQL = if (node.ids.getOrElse(Nil).isEmpty) {
+          node.categories
+            .map { blterms =>
+              if (blterms.isEmpty || ((blterms.size == 1) && (blterms.head.shorthand == "NamedThing"))) {
+                sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
+              } else {
+                val (biolinkClassNode, biolinkClassConstraints) =
+                  if (blterms.size == 1) (sparql"${blterms.head.iri}", sparql"")
+                  else {
+                    val blVar = QueryText(s"?${nodeVarName}_biolink")
+                    val blIRIs = blterms.map(t => sparql" ${t.iri} ").reduceOption(_ + _).getOrElse(sparql"")
+                    (blVar, sparql"VALUES blVar { $blIRIs }")
+                  }
                 val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
                 sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
@@ -96,22 +105,25 @@ object QueryService {
                 $nodeVar $RDFSSubClassOf $nodeSuperVar .
                 FILTER(isIRI($nodeSuperVar)) 
                 GRAPH $BiolinkModelGraph {
-                $nodeSuperVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ${blt.iri} .
+                $biolinkClassConstraints
+                $nodeSuperVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $biolinkClassNode .
                 }
               """
               }
             }
             .getOrElse(sparql"")
-        } else
-          node.id
-            .map { c =>
+        } else {
+          node.ids
+            .map { ids =>
+              val idsList = ids.map(i => sparql" $i ").reduceOption(_ + _).getOrElse(sparql"")
               sparql"""
               $nodeVar $RDFSLabel $nodeLabelVar . 
               FILTER(isIRI($nodeVar))
-              VALUES $nodeVar { $c }
+              VALUES $nodeVar { $idsList }
             """
             }
             .getOrElse(sparql"")
+        }
         nodeLocalID -> (node, nodeVarName, nodeSPARQL)
       }
       .to(Map)
@@ -120,16 +132,30 @@ object QueryService {
       .map { case ((edgeLocalID, edge), index) =>
         val pred = s"e$index"
         val predVar = QueryText(s"?$pred")
-        val edgeType = edge.predicate.getOrElse(BiolinkRelatedTo)
+        edge.relation //FIXME use this
+        val edgeTypes = edge.predicates match {
+          case None => List(BiolinkRelatedTo)
+          case Some(Nil) => List(BiolinkRelatedTo)
+          case Some(predicates) => predicates
+        }
         val predicateValues =
           // allow any edge to match related_to
-          if (edgeType == BiolinkRelatedTo) sparql""
-          else
+          if (edgeTypes == List(BiolinkRelatedTo)) sparql""
+          else {
+            val (predicateNode, predicateConstraints) =
+              if (edgeTypes.size == 1) (sparql"${edgeTypes.head.iri}", sparql"")
+              else {
+                val predicateVar = QueryText(s"?${pred}_predicate")
+                val edgeTypeIRIs = edgeTypes.map(t => sparql" ${t.iri} ").reduceOption(_ + _).getOrElse(sparql"")
+                (predicateVar, sparql"VALUES blVar { $edgeTypeIRIs }")
+              }
             sparql"""
                    GRAPH $BiolinkModelGraph {
-                   $predVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ${edgeType.iri} .
+                   $predicateConstraints
+                   $predVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $predicateNode .
                    }
                   """
+          }
         val sparql = (for {
           subj <- nodesToVariables.get(edge.subject).map(_._2)
           subjVar = QueryText(s"?$subj")
