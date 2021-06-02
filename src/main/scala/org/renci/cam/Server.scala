@@ -1,7 +1,6 @@
 package org.renci.cam
 
 import java.util.Properties
-
 import cats.effect.Blocker
 import cats.implicits._
 import io.circe.generic.auto._
@@ -17,6 +16,7 @@ import org.http4s.server.middleware.{Logger, _}
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.Utilities._
 import org.renci.cam.domain._
+import sttp.tapir.Endpoint
 import sttp.tapir.docs.openapi._
 import sttp.tapir.json.circe._
 import sttp.tapir.openapi.circe.yaml._
@@ -54,6 +54,31 @@ object Server extends App {
       }
     } yield ret
 
+  val metaKnowlegeGraphEndpoint: URIO[Has[PrefixesMap], ZEndpoint[Unit, String, MetaKnowledgeGraph]] = {
+    for {
+      prefixes <- biolinkPrefixes
+    } yield {
+      implicit val iriDecoder: Decoder[IRI] = IRI.makeDecoder(prefixes.prefixesMap)
+      implicit val iriEncoder: Encoder[IRI] = IRI.makeEncoder(prefixes.prefixesMap)
+      implicit val iriKeyDecoder: KeyDecoder[IRI] = IRI.makeKeyDecoder(prefixes.prefixesMap)
+      implicit val iriKeyEncoder: KeyEncoder[IRI] = IRI.makeKeyEncoder(prefixes.prefixesMap)
+      endpoint.get
+        .in("meta_knowledge_graph")
+        .errorOut(stringBody)
+        .out(jsonBody[MetaKnowledgeGraph])
+        .summary("Meta knowledge graph representation of this TRAPI web service.")
+    }
+  }
+
+  def metaKnowledgeGraphRouteR(endpoint: ZEndpoint[Unit, String, MetaKnowledgeGraph])
+    : ZIO[Has[AppConfig] with HttpClient with Has[Biolink] with Has[PrefixesMap], Throwable, HttpRoutes[Task]] =
+    for {
+      cachedResponse <- MetaKnowledgeGraphService.run
+      ret <- endpoint.toRoutesR { case () =>
+        ZIO.effectTotal(cachedResponse)
+      }
+    } yield ret
+
   val queryEndpointZ: URIO[Has[PrefixesMap], ZEndpoint[(Option[Int], TRAPIQueryRequestBody), String, TRAPIResponse]] = {
     for {
       prefixes <- biolinkPrefixes
@@ -79,7 +104,7 @@ object Server extends App {
         queryGraph <-
           ZIO
             .fromOption(body.message.query_graph)
-            .orElseFail(new InvalidBodyException("A query graph is required, but hasn't been provided."))
+            .orElseFail(InvalidBodyException("A query graph is required, but hasn't been provided."))
         message <- QueryService.run(queryGraph, limit)
       } yield message
       program.mapError(error => error.getMessage)
@@ -98,24 +123,31 @@ object Server extends App {
     ZIO.runtime[Any].flatMap { implicit runtime =>
       for {
         appConfig <- config.getConfig[AppConfig]
+        biolink <- ZIO.service[Biolink]
         queryEndpoint <- queryEndpointZ
+        metaKGEndpoint <- metaKnowlegeGraphEndpoint
         predicatesRoute <- predicatesRouteR
+        metaKnowledgeGraphRoute <- metaKnowledgeGraphRouteR(metaKGEndpoint)
         queryRoute <- queryRouteR(queryEndpoint)
-        routes = queryRoute <+> predicatesRoute
+        routes = queryRoute <+> predicatesRoute <+> metaKnowledgeGraphRoute
         // will be available at /docs
-        openAPI = List(queryEndpoint, predicatesEndpoint)
+        openAPI = List(queryEndpoint, predicatesEndpoint, metaKGEndpoint)
           .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator")))
           .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
           .toYaml
         openAPIJson <- ZIO.fromEither(io.circe.yaml.parser.parse(openAPI))
-        info: String = """
+        info: String = s"""
              {
                 "info": {
                   "x-translator": {
                     "component": "KP",
-                    "team": [ "Standards Reference Implementation Team" ]
+                    "team": [ "Standards Reference Implementation Team" ],
+                    "biolink-version": "${biolink.version}"
+                  },
+                  "x-trapi": {
+                    "version": "1.1.0"
                   }
                 }
              }

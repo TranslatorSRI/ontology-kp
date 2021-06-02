@@ -18,11 +18,11 @@ javaOptions += "-Xmx8G"
 
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
-val zioVersion = "1.0.8"
-val zioConfigVersion = "1.0.6"
+val zioVersion = "1.0.9"
+val zioConfigVersion = "1.0.5"
 val tapirVersion = "0.16.16"
 val http4sVersion = "0.21.22"
-val circeVersion = "0.13.0"
+val circeVersion = "0.14.1"
 val logbackVersion = "1.2.3"
 
 javaOptions in reStart += "-Xmx16G"
@@ -52,7 +52,7 @@ libraryDependencies ++= {
     "io.circe"                    %% "circe-core"               % circeVersion,
     "io.circe"                    %% "circe-generic"            % circeVersion,
     "io.circe"                    %% "circe-parser"             % circeVersion,
-    "io.circe"                    %% "circe-yaml"               % "0.13.1",
+    "io.circe"                    %% "circe-yaml"               % "0.14.0",
     "dev.zio"                     %% "zio-test"                 % zioVersion % Test,
     "dev.zio"                     %% "zio-test-sbt"             % zioVersion % Test,
     "ch.qos.logback"               % "logback-classic"          % logbackVersion,
