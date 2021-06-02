@@ -37,8 +37,6 @@
   "STATO": "http://purl.obolibrary.org/obo/STATO_",
   "INO": "http://purl.obolibrary.org/obo/INO_",
   "owl": "http://www.w3.org/2002/07/owl#",
-  "obo": "http://purl.obolibrary.org/obo/",
-  "OBO": "http://purl.obolibrary.org/obo/",
   "oboInOwl": "http://www.geneontology.org/formats/oboInOwl#",
   "dctypes": "http://purl.org/dc/dcmitype/",
   "SNOMED": "http://identifiers.org/snomedct/",
