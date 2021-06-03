@@ -6,7 +6,7 @@ organization := "org.renci"
 
 name := "sparql-kp"
 
-version := "0.1"
+version := "0.2"
 
 licenses := Seq("MIT license" -> url("https://opensource.org/licenses/MIT"))
 
