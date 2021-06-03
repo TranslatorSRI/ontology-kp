@@ -134,7 +134,7 @@ object Server extends App {
         openAPI = List(queryEndpoint, predicatesEndpoint, metaKGEndpoint)
           .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
-          .copy(tags = List(sttp.tapir.openapi.Tag("translator")))
+          .copy(tags = List(sttp.tapir.openapi.Tag("translator"), sttp.tapir.openapi.Tag("trapi")))
           .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
           .toYaml
         openAPIJson <- ZIO.fromEither(io.circe.yaml.parser.parse(openAPI))
