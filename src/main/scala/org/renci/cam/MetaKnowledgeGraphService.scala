@@ -76,7 +76,7 @@ object MetaKnowledgeGraphService {
     } yield edgeResults.map(t => MetaEdge(makeBiolinkTerm(t.subject), makeBiolinkTerm(t.predicate), makeBiolinkTerm(t.`object`)))
   }
 
-  private def makeBiolinkTerm(iri: IRI): domain.BiolinkTerm = {
+  def makeBiolinkTerm(iri: IRI): domain.BiolinkTerm = {
     val localPart = iri.value.replace(domain.BiolinkTerm.namespace, "")
     domain.BiolinkTerm(localPart, iri)
   }
