@@ -99,20 +99,12 @@ package object domain {
 
   }
 
-  final case class TRAPIQueryNode(categories: Option[List[BiolinkTerm]],
-                                  ids: Option[List[IRI]],
-                                  constraints: Option[List[TRAPIQueryConstraint]])
+  final case class TRAPIQueryNode(categories: Option[List[BiolinkTerm]], ids: Option[List[IRI]])
 
   //BiolinkPredicate?
-  final case class TRAPIQueryEdge(predicates: Option[List[BiolinkTerm]],
-                                  relation: Option[IRI],
-                                  subject: String,
-                                  `object`: String,
-                                  constraint: Option[List[TRAPIQueryConstraint]])
+  final case class TRAPIQueryEdge(predicates: Option[List[BiolinkTerm]], subject: String, `object`: String)
 
   final case class TRAPIQueryGraph(nodes: Map[String, TRAPIQueryNode], edges: Map[String, TRAPIQueryEdge])
-
-  final case class TRAPIQueryConstraint()
 
   final case class TRAPIAttribute(attribute_type_id: IRI,
                                   original_attribute_name: Option[String],
@@ -125,11 +117,7 @@ package object domain {
   //BiolinkClass
   final case class TRAPINode(name: Option[String], categories: Option[List[BiolinkTerm]], attributes: Option[List[TRAPIAttribute]])
 
-  final case class TRAPIEdge(predicate: Option[BiolinkTerm],
-                             relation: Option[IRI],
-                             subject: IRI,
-                             `object`: IRI,
-                             attributes: Option[List[TRAPIAttribute]])
+  final case class TRAPIEdge(predicate: Option[BiolinkTerm], subject: IRI, `object`: IRI, attributes: Option[List[TRAPIAttribute]])
 
   final case class TRAPIKnowledgeGraph(nodes: Map[IRI, TRAPINode], edges: Map[String, TRAPIEdge])
 

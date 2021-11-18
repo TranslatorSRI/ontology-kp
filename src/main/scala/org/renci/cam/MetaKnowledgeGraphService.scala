@@ -1,6 +1,6 @@
 package org.renci.cam
 
-import org.apache.jena.vocabulary.{OWL, RDF, SKOS}
+import org.apache.jena.vocabulary.{OWL, RDF, RDFS, SKOS}
 import org.phenoscape.sparql.SPARQLInterpolation._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.QueryService.{BiolinkIsA, BiolinkMixins}
@@ -10,13 +10,14 @@ import zio._
 
 object MetaKnowledgeGraphService {
 
-  private val rdfType = IRI(RDF.`type`.getURI)
+  private val rdfsSubClassOf = IRI(RDFS.subClassOf.getURI)
   private val owlClass = IRI(OWL.Class.getURI)
   private val skosMappingRelation = IRI(SKOS.mappingRelation.getURI)
   private val skosExactMatch = IRI(SKOS.exactMatch.getURI)
   private val skosNarrowMatch = IRI(SKOS.narrowMatch.getURI)
   private val ClassDefinition = IRI("https://w3id.org/linkml/ClassDefinition")
   private val SlotDefinition = IRI("https://w3id.org/linkml/SlotDefinition")
+  private val biolinkCategory = IRI("https://w3id.org/biolink/vocab/category")
 
   final case class Triple(subject: IRI, predicate: IRI, `object`: IRI)
 
@@ -25,38 +26,30 @@ object MetaKnowledgeGraphService {
       (nodesResult, edgesResult) <- nodes.zipPar(edges)
     } yield MetaKnowledgeGraph(nodesResult, edgesResult)
 
-  private def nodes
-    : ZIO[Has[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink], Throwable, Map[domain.BiolinkTerm, MetaNode]] = {
-    final case class Result(blcategory: IRI, prefix: String)
-    for {
-      biolink <- ZIO.service[Biolink]
-      prefixesMap <- ZIO.service[PrefixesMap]
-      prefixes = prefixesMap.prefixesMap
-      biolinkClasses = biolink.classes.keySet.map(makeBiolinkClass)
-      biolinkClassValues = biolinkClasses.map(_.iri).map(iri => sparql" $iri ").reduceOption(_ + _).getOrElse(sparql"")
-      prefixExpansionValues = prefixes
-        .map { case (prefix, expansion) => sparql" ($prefix $expansion) " }
-        .reduceOption(_ + _)
-        .getOrElse(sparql"")
-      query =
-        sparql"""
-            SELECT DISTINCT ?blcategory ?prefix
+  private def nodes: RIO[Has[AppConfig] with HttpClient, Map[domain.BiolinkTerm, MetaNode]] = {
+    final case class Result(blcategory: IRI, ontology: IRI)
+    val query =
+      sparql"""
+            SELECT DISTINCT ?blcategory ?ontology
             WHERE {
-              VALUES ?blcategory { $biolinkClassValues }
-              VALUES (?prefix ?expansion) { $prefixExpansionValues }
-              ?term ^($skosMappingRelation|$skosExactMatch|$skosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ?blcategory .
-              ?term $rdfType $owlClass .
-              FILTER(STRSTARTS(STR(?term), ?expansion))
+              ?blcategory ^$biolinkCategory/${RDFS.isDefinedBy} ?ontology .
+              FILTER EXISTS {
+                ?blcategory ${RDF.`type`} $ClassDefinition .
+              }
             }
             """
+    for {
       parsedQuery <- ZIO.effect(query.toQuery)
       results <- SPARQLQueryExecutor.runSelectQueryAs[Result](parsedQuery)
     } yield results
-      .groupMap(result => MetaKnowledgeGraphService.makeBiolinkTerm(result.blcategory))(_.prefix)
+      .groupMap(result => MetaKnowledgeGraphService.makeBiolinkTerm(result.blcategory))(result => oboPrefixFor(result.ontology))
       .map(kv => kv._1 -> MetaNode(kv._2))
   }
 
-  private def edges: ZIO[Has[AppConfig] with HttpClient, Throwable, List[MetaEdge]] = {
+  private def oboPrefixFor(iri: IRI): String =
+    iri.value.replace("http://purl.obolibrary.org/obo/", "").replace(".owl", "").toUpperCase()
+
+  private def edges: RIO[Has[AppConfig] with HttpClient, List[MetaEdge]] = {
     val query =
       sparql"""
             SELECT DISTINCT (?blSubjectClass AS ?subject) (?slot AS ?predicate) (?blObjectClass AS ?object)
@@ -64,9 +57,9 @@ object MetaKnowledgeGraphService {
   	          ?subject_term ^($skosMappingRelation|$skosExactMatch|$skosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ?blSubjectClass .
               ?object_term ^($skosMappingRelation|$skosExactMatch|$skosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ?blObjectClass .
               ?relation ^($skosMappingRelation|$skosExactMatch|$skosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* ?slot .
-              ?slot $rdfType $SlotDefinition .
-              ?blSubjectClass $rdfType $ClassDefinition .
-              ?blObjectClass $rdfType $ClassDefinition .
+              ?slot ${RDF.`type`} $SlotDefinition .
+              ?blSubjectClass ${RDF.`type`} $ClassDefinition .
+              ?blObjectClass ${RDF.`type`} $ClassDefinition .
               ?subject_term ?relation ?object_term .
             }
             """

@@ -39,21 +39,6 @@ object Server extends App {
 
   import LocalTapirJsonCirce._
 
-  val predicatesEndpoint: ZEndpoint[Unit, String, Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]] =
-    endpoint.get
-      .in("predicates")
-      .errorOut(stringBody)
-      .out(jsonBody[Map[BiolinkTerm, Map[BiolinkTerm, List[BiolinkTerm]]]])
-      .summary("Get predicates used at this service")
-
-  val predicatesRouteR: ZIO[Has[AppConfig] with HttpClient with Has[Biolink], Throwable, HttpRoutes[Task]] =
-    for {
-      cachedResponse <- PredicatesService.run
-      ret <- predicatesEndpoint.toRoutesR { case () =>
-        ZIO.effect(cachedResponse).mapError(error => error.getMessage)
-      }
-    } yield ret
-
   val metaKnowlegeGraphEndpoint: URIO[Has[PrefixesMap], ZEndpoint[Unit, String, MetaKnowledgeGraph]] = {
     for {
       prefixes <- biolinkPrefixes
@@ -79,6 +64,15 @@ object Server extends App {
       }
     } yield ret
 
+  private val queryExample: TRAPIQuery = {
+    val n0Node = TRAPIQueryNode(Some(List(BiolinkTerm("BiologicalProcess", IRI(s"${BiolinkTerm.namespace}BiologicalProcess")))), None)
+    val n1Node = TRAPIQueryNode(Some(List(BiolinkTerm("BiologicalProcess", IRI(s"${BiolinkTerm.namespace}BiologicalProcess")))), None)
+    val e0Edge = TRAPIQueryEdge(Some(List(BiolinkTerm("part_of", IRI(s"${BiolinkTerm.namespace}part_of")))), "n1", "n0")
+    val queryGraph = TRAPIQueryGraph(Map("n0" -> n0Node, "n1" -> n1Node), Map("e0" -> e0Edge))
+    val message = TRAPIMessage(Some(queryGraph), None, None)
+    TRAPIQuery(message, None)
+  }
+
   val queryEndpointZ: URIO[Has[PrefixesMap], ZEndpoint[(Option[Int], TRAPIQuery), String, TRAPIResponse]] = {
     for {
       prefixes <- biolinkPrefixes
@@ -89,8 +83,8 @@ object Server extends App {
       implicit val iriKeyEncoder: KeyEncoder[IRI] = IRI.makeKeyEncoder(prefixes.prefixesMap)
       endpoint.post
         .in("query")
-        .in(query[Option[Int]]("limit"))
-        .in(jsonBody[TRAPIQuery])
+        .in(query[Option[Int]]("limit").example(Some(10)))
+        .in(jsonBody[TRAPIQuery].example(queryExample))
         .errorOut(stringBody)
         .out(jsonBody[TRAPIResponse])
         .summary("Submit a TRAPI question graph and retrieve matching solutions")
@@ -126,12 +120,11 @@ object Server extends App {
         biolink <- ZIO.service[Biolink]
         queryEndpoint <- queryEndpointZ
         metaKGEndpoint <- metaKnowlegeGraphEndpoint
-        predicatesRoute <- predicatesRouteR
         metaKnowledgeGraphRoute <- metaKnowledgeGraphRouteR(metaKGEndpoint)
         queryRoute <- queryRouteR(queryEndpoint)
-        routes = queryRoute <+> predicatesRoute <+> metaKnowledgeGraphRoute
+        routes = queryRoute <+> metaKnowledgeGraphRoute
         // will be available at /docs
-        openAPI = List(queryEndpoint, predicatesEndpoint, metaKGEndpoint)
+        openAPI = List(queryEndpoint, metaKGEndpoint)
           .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator"), sttp.tapir.openapi.Tag("trapi")))
@@ -147,7 +140,8 @@ object Server extends App {
                     "biolink-version": "${biolink.version}"
                   },
                   "x-trapi": {
-                    "version": "1.1.0"
+                    "version": "1.2.0",
+                    "operations": [ "lookup" ]
                   }
                 }
              }
