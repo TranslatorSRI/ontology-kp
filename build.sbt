@@ -10,7 +10,7 @@ version := "0.2"
 
 licenses := Seq("MIT license" -> url("https://opensource.org/licenses/MIT"))
 
-scalaVersion := "2.13.7"
+scalaVersion := "2.13.8"
 
 scalacOptions := Seq("-unchecked", "-deprecation", "-encoding", "utf8")
 
@@ -18,12 +18,12 @@ javaOptions += "-Xmx8G"
 
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
-val zioVersion = "1.0.9"
-val zioConfigVersion = "1.0.6"
+val zioVersion = "1.0.13"
+val zioConfigVersion = "1.0.10"
 val tapirVersion = "0.16.16"
-val http4sVersion = "0.21.24"
+val http4sVersion = "0.21.32"
 val circeVersion = "0.14.1"
-val logbackVersion = "1.2.3"
+val logbackVersion = "1.2.10"
 
 javaOptions in reStart += "-Xmx16G"
 
@@ -45,18 +45,18 @@ libraryDependencies ++= {
     "org.http4s"                  %% "http4s-dsl"               % http4sVersion,
     "org.http4s"                  %% "http4s-blaze-client"      % http4sVersion,
     "org.http4s"                  %% "http4s-circe"             % http4sVersion,
-    "org.apache.jena"              % "apache-jena-libs"         % "3.17.0",
+    "org.apache.jena"              % "apache-jena-libs"         % "4.4.0",
     "org.phenoscape"              %% "sparql-utils"             % "1.3.1",
     "org.apache.commons"           % "commons-text"             % "1.9",
     "commons-codec"                % "commons-codec"            % "1.15",
     "io.circe"                    %% "circe-core"               % circeVersion,
     "io.circe"                    %% "circe-generic"            % circeVersion,
     "io.circe"                    %% "circe-parser"             % circeVersion,
-    "io.circe"                    %% "circe-yaml"               % "0.14.0",
+    "io.circe"                    %% "circe-yaml"               % "0.14.1",
     "dev.zio"                     %% "zio-test"                 % zioVersion % Test,
     "dev.zio"                     %% "zio-test-sbt"             % zioVersion % Test,
     "ch.qos.logback"               % "logback-classic"          % logbackVersion,
-    "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.3"
+    "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.4"
   )
 }
 
