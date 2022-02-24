@@ -75,7 +75,7 @@ object QueryService {
     val category = makeBiolinkTerm(IRI(solution.getResource(categoryVar).getURI))
     val edgeKGID =
       DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
-    val trapiEdge = TRAPIEdge(Some(category), None, sourceIRI, targetIRI, None) //FIXME return 'relation'
+    val trapiEdge = TRAPIEdge(Some(category), sourceIRI, targetIRI, None)
     val trapiEdgeBinding = TRAPIEdgeBinding(edgeKGID)
     ((edgeLocalID, List(trapiEdgeBinding)), (edgeKGID, trapiEdge))
   }
@@ -133,7 +133,6 @@ object QueryService {
       .map { case ((edgeLocalID, edge), index) =>
         val pred = s"e$index"
         val predVar = QueryText(s"?$pred")
-        edge.relation //FIXME use this
         val edgeTypes = edge.predicates match {
           case None => List(BiolinkRelatedTo)
           case Some(Nil) => List(BiolinkRelatedTo)
