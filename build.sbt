@@ -4,9 +4,9 @@ enablePlugins(JavaAppPackaging, DockerPlugin)
 
 organization := "org.renci"
 
-name := "sparql-kp"
+name := "ontology-kp"
 
-version := "0.2"
+version := "0.2.1"
 
 licenses := Seq("MIT license" -> url("https://opensource.org/licenses/MIT"))
 
@@ -25,7 +25,7 @@ val http4sVersion = "0.21.32"
 val circeVersion = "0.14.1"
 val logbackVersion = "1.2.10"
 
-javaOptions in reStart += "-Xmx16G"
+reStart / javaOptions += "-Xmx16G"
 
 libraryDependencies ++= {
   Seq(
@@ -60,12 +60,6 @@ libraryDependencies ++= {
   )
 }
 
-dockerBaseImage := "openjdk:14-alpine"
-daemonUser in Docker := "sparqlkp"
-dockerExposedPorts += 8080
-dockerApiVersion := Some(DockerApiVersion(1, 40))
-dockerChmodType := DockerChmodType.UserGroupWriteExecute
-dockerCommands := dockerCommands.value.flatMap {
-  case cmd @ Cmd("EXPOSE", _) => List(Cmd("RUN", "apk update && apk add bash"), cmd)
-  case other => List(other)
-}
+dockerUsername := Some("renciorg")
+dockerExposedPorts := Seq(8080)
+dockerUpdateLatest := true
