@@ -5,7 +5,7 @@ import zio.config._
 import zio.config.magnolia.DeriveConfigDescriptor._
 import zio.config.magnolia.Descriptor
 
-final case class AppConfig(host: String, location: String, port: Int, sparqlEndpoint: Uri)
+final case class AppConfig(host: String, basePath: String, port: Int, sparqlEndpoint: Uri)
 
 object AppConfig {
 
