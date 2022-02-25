@@ -7,7 +7,7 @@ import io.circe.yaml.syntax._
 import org.http4s._
 import org.http4s.implicits._
 import org.http4s.server.Router
-import org.http4s.server.blaze.BlazeServerBuilder
+import org.http4s.blaze.server.BlazeServerBuilder
 import org.http4s.server.middleware._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.Utilities._
