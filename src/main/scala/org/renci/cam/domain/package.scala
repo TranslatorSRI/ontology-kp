@@ -106,13 +106,22 @@ package object domain {
 
   final case class TRAPIQueryGraph(nodes: Map[String, TRAPIQueryNode], edges: Map[String, TRAPIQueryEdge])
 
-  final case class TRAPIAttribute(attribute_type_id: IRI,
+  final case class TRAPIAttribute(attribute_source: Option[String],
+                                  attribute_type_id: IRI,
                                   original_attribute_name: Option[String],
-                                  value_type_id: IRI,
-                                  attribute_source: Option[String],
-                                  value: String,
-                                  value_url: Option[IRI],
-                                  description: Option[String])
+                                  value: List[String],
+                                  value_type_id: Option[IRI],
+                                  value_url: Option[String],
+                                  description: Option[String],
+                                  attributes: Option[List[TRAPISubAttribute]])
+
+  final case class TRAPISubAttribute(attribute_source: Option[String],
+                                     attribute_type_id: IRI,
+                                     original_attribute_name: Option[String],
+                                     value: List[String],
+                                     value_type_id: Option[IRI],
+                                     value_url: Option[String],
+                                     description: Option[String])
 
   //BiolinkClass
   final case class TRAPINode(name: Option[String], categories: Option[List[BiolinkTerm]], attributes: Option[List[TRAPIAttribute]])
