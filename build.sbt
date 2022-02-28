@@ -60,6 +60,7 @@ libraryDependencies ++= {
   )
 }
 
+dockerBaseImage := "openjdk:17-buster"
 dockerUsername := Some("renciorg")
 dockerExposedPorts := Seq(8080)
 dockerUpdateLatest := true
