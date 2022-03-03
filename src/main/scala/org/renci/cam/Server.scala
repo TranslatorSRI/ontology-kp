@@ -125,13 +125,21 @@ object Server extends App {
           .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator"), sttp.tapir.openapi.Tag("trapi")))
-          .servers(List(sttp.tapir.openapi.Server(appConfig.basePath)))
           .toYaml
         openAPIJson <- ZIO.fromEither(io.circe.yaml.parser.parse(openAPI))
         info: String = s"""
              {
+                "servers": [
+                  {
+                    "url": "${appConfig.basePath}",
+                    "description": "Default server",
+                    "x-maturity": "production",
+                    "x-location": "RENCI"
+                  }
+                ],
                 "info": {
                   "x-translator": {
+                    "infores": "infores:sri-ontology",
                     "component": "KP",
                     "team": [ "Standards Reference Implementation Team" ],
                     "biolink-version": "${biolink.version}"
