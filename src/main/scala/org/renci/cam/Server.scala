@@ -133,7 +133,7 @@ object Server extends App {
                   {
                     "url": "${appConfig.basePath}",
                     "description": "Default server",
-                    "x-maturity": "production",
+                    "x-maturity": "${appConfig.maturity}",
                     "x-location": "RENCI"
                   }
                 ],
