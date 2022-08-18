@@ -40,6 +40,7 @@ object MetaKnowledgeGraphService {
                 SELECT DISTINCT ?ontology
                 WHERE {
                   ?x ${RDFS.isDefinedBy} ?ontology .
+                  FILTER(isIRI(?ontology))
                 } 
               }
               $BlazegraphPrior $BlazegraphRunFirst true .
