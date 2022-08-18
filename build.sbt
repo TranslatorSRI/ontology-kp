@@ -18,7 +18,7 @@ javaOptions += "-Xmx8G"
 
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
-val zioVersion = "1.0.16"
+val zioVersion = "2.0.1"
 val zioConfigVersion = "1.0.10"
 val tapirVersion = "0.16.16"
 val http4sVersion = "0.21.33"
