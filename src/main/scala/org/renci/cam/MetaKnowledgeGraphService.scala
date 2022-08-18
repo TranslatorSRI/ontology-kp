@@ -18,6 +18,8 @@ object MetaKnowledgeGraphService {
   private val ClassDefinition = IRI("https://w3id.org/linkml/ClassDefinition")
   private val SlotDefinition = IRI("https://w3id.org/linkml/SlotDefinition")
   private val biolinkCategory = IRI("https://w3id.org/biolink/vocab/category")
+  private val BlazegraphPrior = IRI("http://www.bigdata.com/queryHints#Prior")
+  private val BlazegraphRunFirst = IRI("http://www.bigdata.com/queryHints#runFirst")
 
   final case class Triple(subject: IRI, predicate: IRI, `object`: IRI)
 
@@ -32,10 +34,16 @@ object MetaKnowledgeGraphService {
       sparql"""
             SELECT DISTINCT ?blcategory ?ontology
             WHERE {
+              ?blcategory ${RDF.`type`} $ClassDefinition .
               ?blcategory ^$biolinkCategory/${RDFS.isDefinedBy} ?ontology .
-              FILTER EXISTS {
-                ?blcategory ${RDF.`type`} $ClassDefinition .
+              {
+                SELECT DISTINCT ?ontology
+                WHERE {
+                  ?x ${RDFS.isDefinedBy} ?ontology .
+                  FILTER(isIRI(?ontology))
+                } 
               }
+              $BlazegraphPrior $BlazegraphRunFirst true .
             }
             """
     for {

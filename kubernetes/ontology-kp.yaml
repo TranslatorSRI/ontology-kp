@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ontology-kp-api
+  labels:
+    app: ontology-kp-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ontology-kp-api
+  template:
+    metadata:
+      labels:
+        app: ontology-kp-api
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 3000
+      containers:
+      - name: ontology-kp
+        image: "renciorg/ontology-kp:0.4"
+        ports:
+        - containerPort: 8080
+        env:
+        - name: JAVA_OPTS
+          value: "-Xmx4G"
+        - name: PORT
+          value: "8080"
+        - name: BASE_PATH
+          value: "https://ontology-kp-dev.apps.renci.org"
+        - name: SPARQL_ENDPOINT
+          value: "http://ontology-kp-ubergraph.translator-dev/blazegraph/sparql"
+        - name: MATURITY
+          value: "development"
+        resources:
+          limits:
+            memory: 6G
+            cpu: '1'
+          requests:
+            cpu: '1'
+            memory: 6G
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ontology-kp-api-service
+spec:
+  selector:
+    app: ontology-kp-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ontology-kp-api-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+#    nginx.ingress.kubernetes.io/whitelist-source-range: "0.0.0.0/0,::/0"
+spec:
+  tls:
+  - hosts:
+      - ontology-kp-dev.apps.renci.org
+    secretName: ontology-kp-dev.apps.renci.org-tls
+  rules:
+  - host: ontology-kp-dev.apps.renci.org
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: ontology-kp-api-service
+            port:
+              number: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ubergraph-sparql
+  labels:
+    app: ubergraph-sparql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ubergraph-sparql
+  template:
+    metadata:
+      labels:
+        app: ubergraph-sparql
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 3000
+        fsGroup: 2000
+      initContainers:
+      - name: provision-database
+        image: obolibrary/odklite:v1.3.1
+        volumeMounts:
+        - mountPath: "/data"
+          name: scratch-volume
+        command:
+        - /bin/bash
+        - -c
+        - "cd /data && echo 'com.bigdata.journal.AbstractJournal.file=/data/blazegraph.jnl' >blazegraph.properties && curl -L -O 'https://ubergraph.apps.renci.org/downloads/current/ubergraph.jnl.gz' && gunzip ubergraph.jnl.gz && mv ubergraph.jnl blazegraph.jnl"
+      containers:
+      - name: blazegraph
+        image: phenoscape/blazegraph:2.1.5.0
+        ports:
+        - containerPort: 8080
+        workingDir: "/data"
+        env:
+        - name: BLAZEGRAPH_MEMORY
+          value: "24G"
+        - name: BLAZEGRAPH_TIMEOUT
+          value: "60000"
+        - name: BLAZEGRAPH_READONLY
+          value: "true"
+        resources:
+          limits:
+            cpu: '2'
+            memory: 32G
+        volumeMounts:
+        - mountPath: "/data"
+          name: scratch-volume
+      volumes:
+      - name: scratch-volume
+        ephemeral:
+          volumeClaimTemplate:
+            spec:
+              accessModes:
+              - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 100G
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ontology-kp-ubergraph
+spec:
+  selector:
+    app: ubergraph-sparql
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
