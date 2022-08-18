@@ -1,34 +1,29 @@
 package org.renci.cam
 
-import java.util.Properties
-import cats.effect.Blocker
 import cats.implicits._
+import io.circe._
 import io.circe.generic.auto._
 import io.circe.yaml.syntax._
-import io.circe._
 import org.http4s._
-import org.http4s.dsl.Http4sDsl
-import org.http4s.headers.Location
 import org.http4s.implicits._
 import org.http4s.server.Router
 import org.http4s.server.blaze.BlazeServerBuilder
-import org.http4s.server.middleware.{Logger, _}
+import org.http4s.server.middleware._
 import org.renci.cam.HttpClient.HttpClient
 import org.renci.cam.Utilities._
 import org.renci.cam.domain._
-import sttp.tapir.Endpoint
 import sttp.tapir.docs.openapi._
 import sttp.tapir.json.circe._
 import sttp.tapir.openapi.circe.yaml._
 import sttp.tapir.openapi.{Contact, Info, License}
 import sttp.tapir.server.http4s.ztapir._
+import sttp.tapir.swagger.http4s.SwaggerHttp4s
 import sttp.tapir.ztapir._
+import zio._
 import zio.config.typesafe.TypesafeConfig
 import zio.interop.catz._
 import zio.interop.catz.implicits._
-import zio._
 
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 object Server extends App {
@@ -113,6 +108,8 @@ object Server extends App {
     Some(License("MIT License", Some("https://opensource.org/licenses/MIT")))
   )
 
+  private val cors = CORS.policy.withAllowOriginAll.withAllowCredentials(false)
+
   val server: RIO[Has[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink], Unit] =
     ZIO.runtime[Any].flatMap { implicit runtime =>
       for {
@@ -128,13 +125,21 @@ object Server extends App {
           .toOpenAPI("Ontology-KP API", "0.1")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator"), sttp.tapir.openapi.Tag("trapi")))
-          .servers(List(sttp.tapir.openapi.Server(appConfig.location)))
           .toYaml
         openAPIJson <- ZIO.fromEither(io.circe.yaml.parser.parse(openAPI))
         info: String = s"""
              {
+                "servers": [
+                  {
+                    "url": "${appConfig.basePath}",
+                    "description": "Default server",
+                    "x-maturity": "${appConfig.maturity}",
+                    "x-location": "RENCI"
+                  }
+                ],
                 "info": {
                   "x-translator": {
+                    "infores": "infores:sri-ontology",
                     "component": "KP",
                     "team": [ "Standards Reference Implementation Team" ],
                     "biolink-version": "${biolink.version}"
@@ -148,13 +153,13 @@ object Server extends App {
           """
         infoJson <- ZIO.fromEither(io.circe.parser.parse(info))
         openAPIExtended = infoJson.deepMerge(openAPIJson).asYaml.spaces2
-        docsRoute = swaggerRoutes(openAPIExtended)
+        docsRoute = new SwaggerHttp4s(openAPIExtended).routes[Task]
         httpApp = Router("" -> (routes <+> docsRoute)).orNotFound
         httpAppWithLogging = Logger.httpApp(true, false)(httpApp)
         result <-
           BlazeServerBuilder[Task](runtime.platform.executor.asEC)
             .bindHttp(appConfig.port, appConfig.host)
-            .withHttpApp(CORS(httpAppWithLogging))
+            .withHttpApp(cors(httpAppWithLogging))
             .withResponseHeaderTimeout(800.seconds)
             .withIdleTimeout(900.seconds)
             .serve
@@ -175,39 +180,5 @@ object Server extends App {
       appLayer = httpClientLayer >+> prefixesLayer >+> biolinkLayer ++ configLayer
       out <- server.provideLayer(appLayer)
     } yield out).exitCode
-
-  // hack using SwaggerHttp4s code to handle running in subdirectory
-  private def swaggerRoutes(yaml: String): HttpRoutes[Task] = {
-    val dsl = Http4sDsl[Task]
-    import dsl._
-    val contextPath = "docs"
-    val yamlName = "docs.yaml"
-    HttpRoutes.of[Task] {
-      case path @ GET -> Root / `contextPath` =>
-        val queryParameters = Map("url" -> Seq(s"$yamlName"))
-        Uri
-          .fromString(s"$contextPath/index.html")
-          .map(uri => uri.setQueryParams(queryParameters))
-          .map(uri => PermanentRedirect(Location(uri)))
-          .getOrElse(NotFound())
-      case GET -> Root / `contextPath` / `yamlName` =>
-        Ok(yaml)
-      case GET -> Root / `contextPath` / swaggerResource =>
-        StaticFile
-          .fromResource[Task](
-            s"/META-INF/resources/webjars/swagger-ui/$swaggerVersion/$swaggerResource",
-            Blocker.liftExecutionContext(ExecutionContext.global)
-          )
-          .getOrElseF(NotFound())
-    }
-  }
-
-  private val swaggerVersion = {
-    val p = new Properties()
-    val pomProperties = getClass.getResourceAsStream("/META-INF/maven/org.webjars/swagger-ui/pom.properties")
-    try p.load(pomProperties)
-    finally pomProperties.close()
-    p.getProperty("version")
-  }
 
 }

@@ -18,9 +18,27 @@ object QueryService {
   val BiolinkIsA: IRI = IRI("https://w3id.org/linkml/is_a")
   val BiolinkMixins: IRI = IRI("https://w3id.org/linkml/mixins")
   val BiolinkRelatedTo: BiolinkTerm = BiolinkTerm("related_to", IRI("https://w3id.org/biolink/vocab/related_to"))
+
+  val BiolinkInformationResource: BiolinkTerm =
+    BiolinkTerm("InformationResource", IRI("https://w3id.org/biolink/vocab/InformationResource"))
+
+  val BiolinkAggregatorKnowledgeSource: BiolinkTerm =
+    BiolinkTerm("aggregator_knowledge_source", IRI("https://w3id.org/biolink/vocab/aggregator_knowledge_source"))
+
   val SkosExactMatch: IRI = IRI("http://www.w3.org/2004/02/skos/core#exactMatch")
   val SkosNarrowMatch: IRI = IRI("http://www.w3.org/2004/02/skos/core#narrowMatch")
   val SkosMappingRelation: IRI = IRI("http://www.w3.org/2004/02/skos/core#mappingRelation")
+
+  private val StandardProvenance = TRAPIAttribute(
+    attribute_source = Some("infores:sri-ontology"),
+    attribute_type_id = BiolinkAggregatorKnowledgeSource.iri,
+    original_attribute_name = None,
+    value = List("infores:sri-ontology"),
+    value_type_id = Some(BiolinkInformationResource.iri),
+    value_url = Some("https://ontology-kp.apps.renci.org"),
+    description = None,
+    attributes = None
+  )
 
   type NodeMap = Map[String, (TRAPIQueryNode, String, QueryText)]
   type EdgeMap = Map[String, (TRAPIQueryEdge, String, QueryText, String)]
@@ -75,7 +93,7 @@ object QueryService {
     val category = makeBiolinkTerm(IRI(solution.getResource(categoryVar).getURI))
     val edgeKGID =
       DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
-    val trapiEdge = TRAPIEdge(Some(category), sourceIRI, targetIRI, None)
+    val trapiEdge = TRAPIEdge(Some(category), sourceIRI, targetIRI, Some(List(StandardProvenance)))
     val trapiEdgeBinding = TRAPIEdgeBinding(edgeKGID)
     ((edgeLocalID, List(trapiEdgeBinding)), (edgeKGID, trapiEdge))
   }
