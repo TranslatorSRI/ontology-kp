@@ -122,7 +122,7 @@ object Server extends App {
         routes = queryRoute <+> metaKnowledgeGraphRoute
         // will be available at /docs
         openAPI = List(queryEndpoint, metaKGEndpoint)
-          .toOpenAPI("Ontology-KP API", "0.1")
+          .toOpenAPI("Ontology-KP API", "0.5-SNAPSHOT")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator"), sttp.tapir.openapi.Tag("trapi")))
           .toYaml
@@ -145,7 +145,7 @@ object Server extends App {
                     "biolink-version": "${biolink.version}"
                   },
                   "x-trapi": {
-                    "version": "1.2.0",
+                    "version": "1.3.0",
                     "operations": [ "lookup" ]
                   }
                 }
