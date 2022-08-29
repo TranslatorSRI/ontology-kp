@@ -74,7 +74,8 @@ object MetaKnowledgeGraphService {
     for {
       parsedQuery <- ZIO.effect(query.toQuery)
       edgeResults <- SPARQLQueryExecutor.runSelectQueryAs[Triple](parsedQuery)
-    } yield edgeResults.map(t => MetaEdge(makeBiolinkTerm(t.subject), makeBiolinkTerm(t.predicate), makeBiolinkTerm(t.`object`)))
+    } yield edgeResults.map(t =>
+      MetaEdge(makeBiolinkTerm(t.subject), makeBiolinkTerm(t.predicate), makeBiolinkTerm(t.`object`), attributes = None))
   }
 
   def makeBiolinkTerm(iri: IRI): domain.BiolinkTerm = {
