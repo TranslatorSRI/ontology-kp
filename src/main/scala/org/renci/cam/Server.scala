@@ -123,7 +123,7 @@ object Server extends App {
         routes = queryRoute <+> metaKnowledgeGraphRoute
         // will be available at /docs
         openAPI = List(queryEndpoint, metaKGEndpoint)
-          .toOpenAPI("Ontology-KP API", "0.5-SNAPSHOT")
+          .toOpenAPI("Ontology-KP API", "0.5")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator"), sttp.tapir.openapi.Tag("trapi")))
           .toYaml
