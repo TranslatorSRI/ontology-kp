@@ -1,5 +1,7 @@
 package org.renci.cam
 
+import io.circe.generic.auto._
+import io.circe.parser._
 import org.apache.jena.vocabulary.{OWL, RDF, RDFS, SKOS}
 import org.phenoscape.sparql.SPARQLInterpolation._
 import org.renci.cam.HttpClient.HttpClient
@@ -7,6 +9,10 @@ import org.renci.cam.QueryService.{BiolinkIsA, BiolinkMixins}
 import org.renci.cam.Utilities.PrefixesMap
 import org.renci.cam.domain.{IRI, MetaEdge, MetaKnowledgeGraph, MetaNode}
 import zio._
+import zio.blocking.{effectBlockingIO, Blocking}
+
+import java.nio.charset.StandardCharsets
+import scala.io.Source
 
 object MetaKnowledgeGraphService {
 
@@ -23,10 +29,16 @@ object MetaKnowledgeGraphService {
 
   final case class Triple(subject: IRI, predicate: IRI, `object`: IRI)
 
-  def run: ZIO[Has[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink], Throwable, MetaKnowledgeGraph] =
+  def run: ZIO[Has[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink] with Blocking, Throwable, MetaKnowledgeGraph] =
     for {
-      (nodesResult, edgesResult) <- nodes.zipPar(edges)
-    } yield MetaKnowledgeGraph(nodesResult, edgesResult)
+      jsonText <- effectBlockingIO(
+        Source.fromInputStream(getClass.getResourceAsStream("/metaknowledgegraph.json"), StandardCharsets.UTF_8.name()).mkString)
+      kg <- ZIO.fromEither(decode[MetaKnowledgeGraph](jsonText))
+    } yield kg
+
+//    for {
+//      (nodesResult, edgesResult) <- nodes.zip(edges)
+//    } yield MetaKnowledgeGraph(nodesResult, edgesResult)
 
   private def nodes: RIO[Has[AppConfig] with HttpClient, Map[domain.BiolinkTerm, MetaNode]] = {
     final case class Result(blcategory: IRI, ontology: IRI)
@@ -35,7 +47,6 @@ object MetaKnowledgeGraphService {
             SELECT DISTINCT ?blcategory ?ontology
             WHERE {
               ?blcategory ${RDF.`type`} $ClassDefinition .
-              ?blcategory ^$biolinkCategory/${RDFS.isDefinedBy} ?ontology .
               {
                 SELECT DISTINCT ?ontology
                 WHERE {
@@ -44,6 +55,9 @@ object MetaKnowledgeGraphService {
                 } 
               }
               $BlazegraphPrior $BlazegraphRunFirst true .
+              FILTER EXISTS {
+                ?blcategory ^$biolinkCategory/${RDFS.isDefinedBy} ?ontology .
+              }
             }
             """
     for {
