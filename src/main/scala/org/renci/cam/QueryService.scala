@@ -105,20 +105,19 @@ object QueryService {
         val nodeVar = QueryText(s"?$nodeVarName")
         val nodeLabelVar = QueryText(s"?${nodeVarName}_label")
         val nodeSPARQL = if (node.ids.getOrElse(Nil).isEmpty) {
-          node.categories
-            .map { blterms =>
-              if (blterms.isEmpty || ((blterms.size == 1) && (blterms.head.shorthand == "NamedThing"))) {
-                sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
-              } else {
-                val (biolinkClassNode, biolinkClassConstraints) =
-                  if (blterms.size == 1) (sparql"${blterms.head.iri}", sparql"")
-                  else {
-                    val blVar = QueryText(s"?${nodeVarName}_biolink")
-                    val blIRIs = blterms.map(t => sparql" ${t.iri} ").reduceOption(_ + _).getOrElse(sparql"")
-                    (blVar, sparql"VALUES $blVar { $blIRIs }")
-                  }
-                val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
-                sparql"""
+          val blterms = node.categories.getOrElse(Nil)
+          if (blterms.isEmpty || ((blterms.size == 1) && (blterms.head.shorthand == "NamedThing"))) {
+            sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
+          } else {
+            val (biolinkClassNode, biolinkClassConstraints) =
+              if (blterms.size == 1) (sparql"${blterms.head.iri}", sparql"")
+              else {
+                val blVar = QueryText(s"?${nodeVarName}_biolink")
+                val blIRIs = blterms.map(t => sparql" ${t.iri} ").reduceOption(_ + _).getOrElse(sparql"")
+                (blVar, sparql"VALUES $blVar { $blIRIs }")
+              }
+            val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
+            sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
                 FILTER(isIRI($nodeVar))
                 $nodeVar $RDFSSubClassOf $nodeSuperVar .
@@ -128,9 +127,7 @@ object QueryService {
                 $nodeSuperVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $biolinkClassNode .
                 }
               """
-              }
-            }
-            .getOrElse(sparql"")
+          }
         } else {
           node.ids
             .map { ids =>
