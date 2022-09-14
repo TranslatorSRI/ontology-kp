@@ -125,7 +125,7 @@ package object domain {
   final case class TRAPIAttribute(attribute_source: Option[String],
                                   attribute_type_id: IRI,
                                   original_attribute_name: Option[String],
-                                  value: List[String],
+                                  value: String,
                                   value_type_id: Option[IRI],
                                   value_url: Option[String],
                                   description: Option[String],
