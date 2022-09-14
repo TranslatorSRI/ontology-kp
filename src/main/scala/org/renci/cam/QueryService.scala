@@ -12,10 +12,10 @@ import zio._
 
 object QueryService {
 
-  val RDFSSubClassOf: IRI = IRI("http://www.w3.org/2000/01/rdf-schema#subClassOf")
   val RDFSLabel: IRI = IRI("http://www.w3.org/2000/01/rdf-schema#label")
   val BiolinkModelGraph: IRI = IRI("https://biolink.github.io/biolink-model/")
   val BiolinkIsA: IRI = IRI("https://w3id.org/linkml/is_a")
+  val BiolinkCategory: IRI = IRI("https://w3id.org/biolink/vocab/category")
   val BiolinkMixins: IRI = IRI("https://w3id.org/linkml/mixins")
   val BiolinkRelatedTo: BiolinkTerm = BiolinkTerm("related_to", IRI("https://w3id.org/biolink/vocab/related_to"))
 
@@ -105,32 +105,26 @@ object QueryService {
         val nodeVar = QueryText(s"?$nodeVarName")
         val nodeLabelVar = QueryText(s"?${nodeVarName}_label")
         val nodeSPARQL = if (node.ids.getOrElse(Nil).isEmpty) {
-          node.categories
-            .map { blterms =>
-              if (blterms.isEmpty || ((blterms.size == 1) && (blterms.head.shorthand == "NamedThing"))) {
-                sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
-              } else {
-                val (biolinkClassNode, biolinkClassConstraints) =
-                  if (blterms.size == 1) (sparql"${blterms.head.iri}", sparql"")
-                  else {
-                    val blVar = QueryText(s"?${nodeVarName}_biolink")
-                    val blIRIs = blterms.map(t => sparql" ${t.iri} ").reduceOption(_ + _).getOrElse(sparql"")
-                    (blVar, sparql"VALUES $blVar { $blIRIs }")
-                  }
-                val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
-                sparql"""
+          val blterms = node.categories.getOrElse(Nil)
+          if (blterms.isEmpty || ((blterms.size == 1) && (blterms.head.shorthand == "NamedThing"))) {
+            sparql"$nodeVar $RDFSLabel $nodeLabelVar ."
+          } else {
+            val (biolinkClassNode, biolinkClassConstraints) =
+              if (blterms.size == 1) (sparql"${blterms.head.iri}", sparql"")
+              else {
+                val blVar = QueryText(s"?${nodeVarName}_biolink")
+                val blIRIs = blterms.map(t => sparql" ${t.iri} ").reduceOption(_ + _).getOrElse(sparql"")
+                (blVar, sparql"VALUES $blVar { $blIRIs }")
+              }
+            sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
-                FILTER(isIRI($nodeVar))
-                $nodeVar $RDFSSubClassOf $nodeSuperVar .
-                FILTER(isIRI($nodeSuperVar)) 
+                FILTER(isIRI($nodeVar)) 
                 GRAPH $BiolinkModelGraph {
                 $biolinkClassConstraints
-                $nodeSuperVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $biolinkClassNode .
+                $nodeVar $BiolinkCategory $biolinkClassNode .
                 }
               """
-              }
-            }
-            .getOrElse(sparql"")
+          }
         } else {
           node.ids
             .map { ids =>
@@ -164,11 +158,11 @@ object QueryService {
           if (edgeTypes == List(BiolinkRelatedTo)) {
             sparql"""
                   GRAPH $BiolinkModelGraph {
-                      { $predVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $categoryVar . }
+                      { $predVar $BiolinkCategory $categoryVar . }
                     UNION
                       { BIND(${BiolinkRelatedTo.iri} AS $categoryVar) }
                     FILTER NOT EXISTS {
-                      $predVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $category2Var .
+                      $predVar $BiolinkCategory $category2Var .
                       FILTER($categoryVar != $category2Var)
                       $category2Var ($BiolinkIsA|$BiolinkMixins)+ $categoryVar .
                     }
@@ -185,11 +179,11 @@ object QueryService {
             sparql"""
                    GRAPH $BiolinkModelGraph {
                      $predicateConstraints
-                     $predVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $predicateNode .
-                     $predVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $categoryVar .
+                     $predVar $BiolinkCategory $predicateNode .
+                     $predVar $BiolinkCategory $categoryVar .
                      $categoryVar ($BiolinkIsA|$BiolinkMixins)* $predicateNode .
                      FILTER NOT EXISTS {
-                       $predVar ^($SkosMappingRelation|$SkosExactMatch|$SkosNarrowMatch)/($BiolinkIsA|$BiolinkMixins)* $category2Var .
+                       $predVar $BiolinkCategory $category2Var .
                        FILTER($categoryVar != $category2Var)
                        $category2Var ($BiolinkIsA|$BiolinkMixins)+ $categoryVar .
                      }
