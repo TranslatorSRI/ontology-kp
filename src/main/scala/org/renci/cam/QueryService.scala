@@ -12,7 +12,6 @@ import zio._
 
 object QueryService {
 
-  val RDFSSubClassOf: IRI = IRI("http://www.w3.org/2000/01/rdf-schema#subClassOf")
   val RDFSLabel: IRI = IRI("http://www.w3.org/2000/01/rdf-schema#label")
   val BiolinkModelGraph: IRI = IRI("https://biolink.github.io/biolink-model/")
   val BiolinkIsA: IRI = IRI("https://w3id.org/linkml/is_a")
@@ -117,15 +116,12 @@ object QueryService {
                 val blIRIs = blterms.map(t => sparql" ${t.iri} ").reduceOption(_ + _).getOrElse(sparql"")
                 (blVar, sparql"VALUES $blVar { $blIRIs }")
               }
-            val nodeSuperVar = QueryText(s"?${nodeVarName}_super")
             sparql"""
                 $nodeVar $RDFSLabel $nodeLabelVar . 
-                FILTER(isIRI($nodeVar))
-                $nodeVar $RDFSSubClassOf $nodeSuperVar .
-                FILTER(isIRI($nodeSuperVar)) 
+                FILTER(isIRI($nodeVar)) 
                 GRAPH $BiolinkModelGraph {
                 $biolinkClassConstraints
-                $nodeSuperVar $BiolinkCategory $biolinkClassNode .
+                $nodeVar $BiolinkCategory $biolinkClassNode .
                 }
               """
           }
