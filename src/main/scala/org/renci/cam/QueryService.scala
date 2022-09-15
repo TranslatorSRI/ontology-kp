@@ -32,6 +32,7 @@ object QueryService {
   val SkosNarrowMatch: IRI = IRI("http://www.w3.org/2004/02/skos/core#narrowMatch")
   val SkosMappingRelation: IRI = IRI("http://www.w3.org/2004/02/skos/core#mappingRelation")
 
+  val EDAMHierarchy: IRI = IRI("http://edamontology.org/data_2589")
   val NonRedundantGraph: IRI = IRI("http://reasoner.renci.org/nonredundant")
   val RedundantGraph: IRI = IRI("http://reasoner.renci.org/redundant")
   val BGPrior: IRI = IRI("http://www.bigdata.com/queryHints#Prior")
@@ -179,6 +180,10 @@ object QueryService {
     val nodeSubQuerySPARQL = nodesToVariables.values.map(_._4).reduceOption(_ + _).getOrElse(sparql"")
     val edgesToVariables = queryGraph.edges.zipWithIndex
       .map { case ((edgeLocalID, edge), index) =>
+        val directEdges = edge.attribute_constraints.toList.flatten.exists { constraint =>
+          (constraint.id == EDAMHierarchy) && (constraint.value.toLowerCase == "direct") && (constraint.operator == "==")
+        }
+        val edgeGraph = if (directEdges) NonRedundantGraph else RedundantGraph
         val pred = s"e$index"
         val predVar = QueryText(s"?$pred")
         val edgeTypes = edge.predicates match {
@@ -239,7 +244,7 @@ object QueryService {
           objVar = QueryText(s"?$obj")
         } yield (outerPredicateSPARQL,
                  sparql"""
-                GRAPH $RedundantGraph { $subjVar $predVar $objVar . }
+                GRAPH $edgeGraph { $subjVar $predVar $objVar . }
                 $subQueryPredicateSPARQL
               """)).getOrElse((sparql"", sparql""))
         edgeLocalID -> (edge, pred, outerEdgeSPARQL, subQueryEdgeSPARQL, categoryVarName)
