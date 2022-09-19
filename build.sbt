@@ -6,7 +6,7 @@ organization := "org.renci"
 
 name := "ontology-kp"
 
-version := "0.5"
+version := "0.6"
 
 licenses := Seq("MIT license" -> url("https://opensource.org/licenses/MIT"))
 
