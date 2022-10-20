@@ -99,29 +99,41 @@ package object domain {
 
   }
 
-  final case class TRAPIQueryNode(categories: Option[List[BiolinkTerm]], ids: Option[List[IRI]])
+  final case class TRAPIQueryNode(categories: Option[List[BiolinkTerm]],
+                                  ids: Option[List[IRI]],
+                                  is_set: Option[Boolean] = Some(false),
+                                  constraints: Option[List[TRAPIAttributeConstraint]] = None)
 
   //BiolinkPredicate?
-  final case class TRAPIQueryEdge(predicates: Option[List[BiolinkTerm]], subject: String, `object`: String)
+  final case class TRAPIQueryEdge(predicates: Option[List[BiolinkTerm]],
+                                  subject: String,
+                                  `object`: String,
+                                  knowledge_type: Option[String] = None,
+                                  attribute_constraints: Option[List[TRAPIAttributeConstraint]] = None,
+                                  qualifier_constraints: Option[List[TRAPIQualifierConstraint]] = None)
 
   final case class TRAPIQueryGraph(nodes: Map[String, TRAPIQueryNode], edges: Map[String, TRAPIQueryEdge])
+
+  final case class TRAPIAttributeConstraint(id: IRI,
+                                            name: String,
+                                            not: Option[Boolean],
+                                            operator: String,
+                                            value: String,
+                                            unit_id: Option[IRI],
+                                            unit_name: Option[String])
 
   final case class TRAPIAttribute(attribute_source: Option[String],
                                   attribute_type_id: IRI,
                                   original_attribute_name: Option[String],
-                                  value: List[String],
+                                  value: String,
                                   value_type_id: Option[IRI],
                                   value_url: Option[String],
                                   description: Option[String],
-                                  attributes: Option[List[TRAPISubAttribute]])
+                                  attributes: Option[List[TRAPIAttribute]])
 
-  final case class TRAPISubAttribute(attribute_source: Option[String],
-                                     attribute_type_id: IRI,
-                                     original_attribute_name: Option[String],
-                                     value: List[String],
-                                     value_type_id: Option[IRI],
-                                     value_url: Option[String],
-                                     description: Option[String])
+  final case class TRAPIQualifier(qualifier_type_id: String, qualifier_value: String)
+
+  final case class TRAPIQualifierConstraint(qualifier_set: List[TRAPIQualifier])
 
   //BiolinkClass
   final case class TRAPINode(name: Option[String], categories: Option[List[BiolinkTerm]], attributes: Option[List[TRAPIAttribute]])
@@ -130,7 +142,7 @@ package object domain {
 
   final case class TRAPIKnowledgeGraph(nodes: Map[IRI, TRAPINode], edges: Map[String, TRAPIEdge])
 
-  final case class TRAPINodeBinding(id: IRI)
+  final case class TRAPINodeBinding(id: IRI, query_id: Option[IRI] = None, attributes: Option[List[TRAPIAttribute]] = None)
 
   final case class TRAPIEdgeBinding(id: String)
 
@@ -140,7 +152,7 @@ package object domain {
                                 knowledge_graph: Option[TRAPIKnowledgeGraph],
                                 results: Option[List[TRAPIResult]])
 
-  final case class TRAPIQuery(message: TRAPIMessage, log_level: Option[String])
+  final case class TRAPIQuery(message: TRAPIMessage, log_level: Option[String], submitter: Option[String] = None)
 
   final case class TRAPIResponse(message: TRAPIMessage)
 
@@ -148,6 +160,16 @@ package object domain {
 
   final case class MetaNode(id_prefixes: List[String])
 
-  final case class MetaEdge(subject: BiolinkTerm, predicate: BiolinkTerm, `object`: BiolinkTerm)
+  final case class MetaEdge(subject: BiolinkTerm,
+                            predicate: BiolinkTerm,
+                            `object`: BiolinkTerm,
+                            attributes: Option[List[MetaAttribute]],
+                            knowledge_types: Option[List[String]] = Some(List("lookup")))
+
+  final case class MetaAttribute(attribute_type_id: IRI,
+                                 attribute_source: Option[String],
+                                 original_attribute_names: Option[List[String]],
+                                 constraint_use: Option[Boolean],
+                                 constraint_name: Option[String])
 
 }
