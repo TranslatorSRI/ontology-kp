@@ -114,7 +114,8 @@ object QueryService {
     val sourceIRI = IRI(solution.getResource(sourceVar).getURI)
     val targetIRI = IRI(solution.getResource(targetVar).getURI)
     val predicateIRI = IRI(solution.getResource(predicateVar).getURI)
-    val category = makeBiolinkTerm(IRI(solution.getResource(s"${categoryVar}_first").getURI))
+    val category = makeBiolinkTerm(
+      Option(solution.getResource(s"${categoryVar}_first")).map(_.getURI).map(IRI(_)).getOrElse(BiolinkRelatedTo.iri))
     val edgeKGID =
       DigestUtils.sha1Hex(s"${sourceIRI.value}${predicateIRI.value}${targetIRI.value}".getBytes(StandardCharsets.UTF_8))
     val trapiEdge = TRAPIEdge(Some(category), sourceIRI, targetIRI, Some(List(StandardProvenance)))
@@ -199,9 +200,7 @@ object QueryService {
           if (edgeTypes == List(BiolinkRelatedTo)) {
             (sparql"""
                   GRAPH $BiolinkModelGraph {
-                      { $predVar $BiolinkCategory $categoryVar . }
-                    UNION
-                      { BIND(${BiolinkRelatedTo.iri} AS $categoryVar) }
+                    $predVar $BiolinkCategory $categoryVar .
                     FILTER NOT EXISTS {
                       $predVar $BiolinkCategory $category2Var .
                       FILTER($categoryVar != $category2Var)
