@@ -20,6 +20,7 @@ import sttp.tapir.server.http4s.ztapir._
 import sttp.tapir.swagger.http4s.SwaggerHttp4s
 import sttp.tapir.ztapir._
 import zio._
+import zio.blocking.Blocking
 import zio.config.typesafe.TypesafeConfig
 import zio.interop.catz._
 import zio.interop.catz.implicits._
@@ -51,7 +52,7 @@ object Server extends App {
   }
 
   def metaKnowledgeGraphRouteR(endpoint: ZEndpoint[Unit, String, MetaKnowledgeGraph])
-    : ZIO[Has[AppConfig] with HttpClient with Has[Biolink] with Has[PrefixesMap], Throwable, HttpRoutes[Task]] =
+    : ZIO[Has[AppConfig] with HttpClient with Has[Biolink] with Has[PrefixesMap] with Blocking, Throwable, HttpRoutes[Task]] =
     for {
       cachedResponse <- MetaKnowledgeGraphService.run
       ret <- endpoint.toRoutesR { case () =>
@@ -110,7 +111,7 @@ object Server extends App {
 
   private val cors = CORS.policy.withAllowOriginAll.withAllowCredentials(false)
 
-  val server: RIO[Has[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink], Unit] =
+  val server: RIO[Has[AppConfig] with HttpClient with Has[PrefixesMap] with Has[Biolink] with Blocking, Unit] =
     ZIO.runtime[Any].flatMap { implicit runtime =>
       for {
         appConfig <- config.getConfig[AppConfig]
@@ -122,7 +123,7 @@ object Server extends App {
         routes = queryRoute <+> metaKnowledgeGraphRoute
         // will be available at /docs
         openAPI = List(queryEndpoint, metaKGEndpoint)
-          .toOpenAPI("Ontology-KP API", "0.1")
+          .toOpenAPI("Ontology-KP API", "0.5")
           .copy(info = openAPIInfo)
           .copy(tags = List(sttp.tapir.openapi.Tag("translator"), sttp.tapir.openapi.Tag("trapi")))
           .toYaml
@@ -145,7 +146,7 @@ object Server extends App {
                     "biolink-version": "${biolink.version}"
                   },
                   "x-trapi": {
-                    "version": "1.2.0",
+                    "version": "1.3.0",
                     "operations": [ "lookup" ]
                   }
                 }
@@ -178,7 +179,7 @@ object Server extends App {
     (for {
       httpClientLayer <- HttpClient.makeHttpClientLayer
       appLayer = httpClientLayer >+> prefixesLayer >+> biolinkLayer ++ configLayer
-      out <- server.provideLayer(appLayer)
+      out <- server.provideCustomLayer(appLayer)
     } yield out).exitCode
 
 }
